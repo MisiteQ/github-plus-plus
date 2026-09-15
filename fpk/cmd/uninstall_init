@@ -1,0 +1,14 @@
+#!/bin/bash
+
+### 卸载应用前执行：还原系统 hosts，保证卸载后网络行为与安装前完全一致。
+###
+### 服务通常已被停止（停止流程会清理 hosts 托管区），
+### 这里再兜底调用一次 -clear-hosts，覆盖进程被强杀等异常场景。
+
+BIN="${TRIM_APPDEST}/ghpp"
+
+if [ -x "${BIN}" ]; then
+    "${BIN}" -clear-hosts -data "${TRIM_PKGVAR}" 2>/dev/null
+fi
+
+exit 0

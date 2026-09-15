@@ -1,0 +1,12 @@
+# 打包产物与本地构建输出
+dist/
+.build/
+ghpp.exe
+
+# 由 scripts/icon.go 生成的根目录图标（fpk/ 内的模板图标不忽略）
+/ICON.PNG
+/ICON_256.PNG
+
+# 本地工具与杂项
+.workbuddy/
+*.log

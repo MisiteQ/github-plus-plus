@@ -1,0 +1,175 @@
+#!/bin/bash
+
+# GitHub++ 加速器 主控脚本：处理 start / stop / status。
+
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+BIN="${TRIM_APPDEST}/ghpp"
+
+log_msg() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}"
+}
+
+# binary_arch 读出 ELF 头里的机器类型（e_machine，小端两字节），
+# 用来在启动前发现"装错架构包"的问题：x86_64=3e00，aarch64=b700。
+# 设备架构对不上时二进制根本无法执行，错误只有一行 exec format error，
+# 用户完全看不出原因，所以这里提前检查并给出明确提示。
+binary_arch() {
+    od -An -tx1 -j18 -N2 "${1}" 2>/dev/null | tr -d ' \n'
+}
+
+device_arch() {
+    case "$(uname -m)" in
+        x86_64)  echo "3e00" ;;
+        aarch64) echo "b700" ;;
+        armv7l|armv8l) echo "2800" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+arch_name() {
+    case "$1" in
+        3e00) echo "x86_64" ;;
+        b700) echo "aarch64(ARM64)" ;;
+        2800) echo "armv7(32位)" ;;
+        *) echo "未知(${1})" ;;
+    esac
+}
+
+check_arch() {
+    local bin_arch dev_arch
+    bin_arch=$(binary_arch "${BIN}")
+    dev_arch=$(device_arch)
+    if [ "${bin_arch}" != "${dev_arch}" ]; then
+        log_msg "错误：二进制架构 $(arch_name "${bin_arch}") 与设备架构 $(arch_name "${dev_arch}") 不匹配"
+        echo "GitHub++ 安装包架构（$(arch_name "${bin_arch}")）与 NAS 设备架构（$(arch_name "${dev_arch}")）不一致，请下载并安装与设备匹配的 fpk 包。" > "${TRIM_TEMP_LOGFILE}" 2>/dev/null
+        return 1
+    fi
+    return 0
+}
+
+start_process() {
+    if status; then
+        return 0
+    fi
+
+    if [ ! -x "${BIN}" ] && [ ! -f "${BIN}" ]; then
+        log_msg "错误：未找到可执行文件 ${BIN}"
+        echo "未找到应用主程序 ${BIN}，请重新安装。" > "${TRIM_TEMP_LOGFILE}" 2>/dev/null
+        return 1
+    fi
+
+    # 架构不匹配时二进制无法执行，提前拦截并给出可读的错误。
+    if ! check_arch; then
+        return 1
+    fi
+
+    [ -x "${BIN}" ] || chmod +x "${BIN}" 2>/dev/null
+
+    log_msg "Starting GitHub++ ..."
+    # 数据目录使用 TRIM_PKGVAR，升级与重装后配置依然保留。
+    #
+    # 这里直接以后台作业方式启动二进制，而不是再套一层 `bash -c`：
+    # 套 bash 时 $! 拿到的是那层 shell 的 PID，而真正的服务进程是它的子进程，
+    # 停服时 TERM 打到壳上、服务进程会变成孤儿继续占用端口，
+    # 表现为"停止后又启动失败/端口被占"。直接启动能让 PID 文件指向真实进程。
+    nohup "${BIN}" -data "${TRIM_PKGVAR}" >> "${LOG_FILE}" 2>&1 &
+    pid=$!
+    printf "%s" "${pid}" > "${PID_FILE}"
+
+    # 等待端口真正就绪：服务启动要测速与写 hosts，需要几秒。
+    # 只有确认进程还活着才算启动成功，否则把日志里的线索回报给应用中心。
+    local i=0
+    while [ $i -lt 15 ]; do
+        if ! check_process "${pid}"; then
+            log_msg "启动失败：进程已退出"
+            # 把日志末尾几行带回给应用中心，用户能直接看到失败原因。
+            {
+                echo "GitHub++ 启动失败，最近日志："
+                tail -n 20 "${LOG_FILE}" 2>/dev/null
+            } > "${TRIM_TEMP_LOGFILE}" 2>/dev/null
+            rm -f "${PID_FILE}"
+            return 1
+        fi
+        sleep 1
+        i=$((i + 1))
+    done
+
+    return 0
+}
+
+stop_process() {
+    log_msg "Stopping GitHub++ ..."
+
+    if [ -r "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+
+        if ! check_process "${pid}"; then
+            rm -f "${PID_FILE}"
+            return 0
+        fi
+
+        # 先发 TERM 让服务优雅退出：停止监听并清理 hosts 托管区。
+        log_msg "send TERM signal to PID:${pid}..."
+        kill -TERM ${pid} >> "${LOG_FILE}" 2>&1
+
+        local count=0
+        while check_process "${pid}" && [ $count -lt 15 ]; do
+            sleep 1
+            count=$((count + 1))
+            log_msg "waiting process terminal... (${count}s/15s)"
+        done
+
+        if check_process "${pid}"; then
+            log_msg "send KILL signal to PID:${pid}..."
+            kill -KILL "${pid}"
+            sleep 1
+            # 被强杀时服务没机会自己清理 hosts，这里兜底清理一次。
+            "${BIN}" -clear-hosts -data "${TRIM_PKGVAR}" >> "${LOG_FILE}" 2>&1
+        fi
+        rm -f "${PID_FILE}"
+    fi
+
+    return 0
+}
+
+check_process() {
+    local pid=$1
+    if kill -0 "${pid}" 2>/dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+status() {
+    if [ -f "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+        if check_process "${pid}"; then
+            return 0
+        else
+            rm -f "${PID_FILE}"
+        fi
+    fi
+
+    return 1
+}
+
+case $1 in
+start)
+    start_process
+    ;;
+stop)
+    stop_process
+    ;;
+status)
+    if status; then
+        exit 0
+    else
+        exit 3
+    fi
+    ;;
+*)
+    exit 1
+    ;;
+esac

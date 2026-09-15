@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub++ 加速器</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="login-view" class="login-wrap" hidden>
+  <form class="login-card" id="login-form">
+    <div class="login-head">
+      <svg viewBox="0 0 32 32" width="40" height="40" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="#0969da"/>
+        <path d="M9 20l7-9 7 9" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h1>GitHub++</h1>
+      <p>飞牛 NAS GitHub 加速器</p>
+    </div>
+    <label class="field">
+      <span>用户名</span>
+      <input type="text" id="login-user" value="admin" autocomplete="username" required>
+    </label>
+    <label class="field">
+      <span>密码</span>
+      <input type="password" id="login-pass" autocomplete="current-password" required>
+    </label>
+    <div class="login-error" id="login-error" hidden></div>
+    <button type="submit" class="btn btn-primary btn-block" id="login-submit">登录</button>
+    <p class="login-hint">默认账号 admin，初始密码 admin123，登录后请及时修改</p>
+  </form>
+</div>
+
+<div id="app-view" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="#0969da"/>
+        <path d="M9 20l7-9 7 9" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>GitHub++</span>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="overview" role="tab">总览</button>
+      <button class="tab" data-tab="mirrors" role="tab">加速源</button>
+      <button class="tab" data-tab="hosts" role="tab">DNS 优选</button>
+      <button class="tab" data-tab="docker" role="tab">Docker 加速</button>
+      <button class="tab" data-tab="logs" role="tab">日志</button>
+      <button class="tab" data-tab="settings" role="tab">设置</button>
+      <button class="tab" data-tab="about" role="tab">关于</button>
+    </nav>
+
+    <div class="topbar-right">
+      <span class="dot" id="run-dot"></span>
+      <span class="run-label" id="run-label">加载中</span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">退出</button>
+    </div>
+  </header>
+
+  <main class="content">
+
+    <section class="panel active" id="panel-overview">
+      <div class="metrics" id="metrics"></div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <h2>加速模式</h2>
+            <span class="muted" id="mode-reason"></span>
+          </div>
+          <div class="mode-picker" id="mode-picker">
+            <button class="mode-opt" data-mode="auto">
+              <strong>自动</strong><small>按实测结果择优</small>
+            </button>
+            <button class="mode-opt" data-mode="proxy">
+              <strong>镜像中转</strong><small>走本地反代</small>
+            </button>
+            <button class="mode-opt" data-mode="hosts">
+              <strong>DNS 优选</strong><small>改写 hosts</small>
+            </button>
+            <button class="mode-opt" data-mode="direct">
+              <strong>直连</strong><small>不做加速</small>
+            </button>
+          </div>
+
+          <div class="verdict" id="verdict"></div>
+
+          <div class="actions">
+            <button class="btn btn-primary" id="btn-refresh">立即测速并优化</button>
+            <button class="btn" id="btn-restart">重启代理</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>请求分布</h2>
+            <span class="muted">按资源类型</span>
+          </div>
+          <div class="chart-box"><canvas id="chart-cat" role="img" aria-label="请求类型分布环形图">请求分布图</canvas></div>
+          <div class="legend" id="legend-cat"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>接入方式</h2>
+          <span class="muted">把下面的地址配置到客户端即可加速</span>
+        </div>
+        <div class="connect-list" id="connect-list"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-mirrors">
+      <div class="card">
+        <div class="card-head">
+          <h2>加速源列表</h2>
+          <div class="head-actions">
+            <span class="muted" id="mirror-summary"></span>
+            <button class="btn btn-sm" id="btn-test-all">全部测速</button>
+            <button class="btn btn-sm btn-primary" id="btn-add-mirror">添加</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="mirror-table">
+            <thead>
+              <tr>
+                <th style="width:32px"></th>
+                <th>名称</th>
+                <th style="width:88px">类型</th>
+                <th style="width:80px">延迟</th>
+                <th style="width:96px">吞吐</th>
+                <th style="width:96px">得分</th>
+                <th style="width:132px">操作</th>
+              </tr>
+            </thead>
+            <tbody id="mirror-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-hosts">
+      <div class="card">
+        <div class="card-head">
+          <h2>DNS 优选</h2>
+          <div class="head-actions">
+            <label class="switch">
+              <input type="checkbox" id="hosts-toggle">
+              <span>启用 hosts 加速</span>
+            </label>
+            <button class="btn btn-sm" id="btn-dns-sync">立即优选</button>
+            <button class="btn btn-sm" id="btn-hosts-clear">清理</button>
+          </div>
+        </div>
+        <div class="notice" id="hosts-notice"></div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>域名</th>
+                <th style="width:150px">优选 IP</th>
+                <th style="width:90px">TCP</th>
+                <th style="width:90px">TLS</th>
+                <th style="width:90px">总计</th>
+              </tr>
+            </thead>
+            <tbody id="dns-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>hosts 文件内容</h2>
+          <span class="muted" id="hosts-path"></span>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th style="width:150px">IP</th><th>域名</th></tr>
+            </thead>
+            <tbody id="hosts-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-docker">
+      <div class="card">
+        <div class="card-head">
+          <h2>Docker 拉取加速</h2>
+          <div class="head-actions">
+            <label class="switch">
+              <input type="checkbox" id="docker-toggle">
+              <span>启用 Docker 加速</span>
+            </label>
+            <button class="btn btn-sm btn-primary" id="btn-docker-save">保存配置</button>
+          </div>
+        </div>
+        <p class="muted" style="margin-top:0">
+          把下面的加速地址填入 Docker 的镜像源配置后，<code>docker pull</code> 会自动经由本加速器，
+          上游按顺序尝试、失效自动切换，无需依赖任何第三方固定节点。
+        </p>
+        <label class="field">
+          <span>加速地址（飞牛 Docker 界面的「镜像源」直接填这个）</span>
+          <div class="copy-row">
+            <input type="text" id="docker-mirror-url" readonly>
+            <button class="btn btn-sm" data-copy-target="docker-mirror-url">复制</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>/etc/docker/daemon.json 参考配置（SSH 场景）</span>
+          <textarea id="docker-daemon-json" rows="4" readonly class="code-area"></textarea>
+          <div class="copy-row"><button class="btn btn-sm" data-copy-target="docker-daemon-json">复制</button></div>
+          <small>修改后执行 sudo systemctl restart docker 生效；飞牛用户推荐直接在 Docker 界面填写镜像源</small>
+        </label>
+        <label class="field">
+          <span>上游列表（每行一个，按优先级排序，official 表示 Docker 官方源兜底）</span>
+          <textarea id="docker-upstreams" rows="5" class="code-area" placeholder="https://docker.1ms.run&#10;https://docker.m.daocloud.io&#10;official"></textarea>
+        </label>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th style="width:170px">仓库</th><th>加速说明</th></tr></thead>
+            <tbody id="docker-registries"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>飞牛系统自身加速</h2>
+          <span class="muted">让 NAS 本机与局域网设备用上加速器</span>
+        </div>
+        <div class="notice">
+          hosts 模式开启时，飞牛系统自身的 GitHub 访问（应用商店、系统更新检查等）已自动加速，无需额外配置。
+          以下片段用于让 NAS 上的命令行工具也走加速通道。
+        </div>
+        <label class="field">
+          <span>Git 仅对 GitHub 走加速（NAS 本机执行一次即可）</span>
+          <textarea id="snippet-git" rows="2" readonly class="code-area"></textarea>
+          <div class="copy-row"><button class="btn btn-sm" data-copy-target="snippet-git">复制</button></div>
+        </label>
+        <label class="field">
+          <span>wget / curl 直接下载（把前缀加在 GitHub 地址前）</span>
+          <textarea id="snippet-curl" rows="2" readonly class="code-area"></textarea>
+          <div class="copy-row"><button class="btn btn-sm" data-copy-target="snippet-curl">复制</button></div>
+        </label>
+        <label class="field">
+          <span>让其他局域网设备把本机设为 HTTP 代理</span>
+          <textarea id="snippet-proxy" rows="2" readonly class="code-area"></textarea>
+          <div class="copy-row"><button class="btn btn-sm" data-copy-target="snippet-proxy">复制</button></div>
+          <small>代理仅加速 GitHub 相关域名，其他网站流量直连不受影响</small>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-logs">
+      <div class="card">
+        <div class="card-head">
+          <h2>运行日志</h2>
+          <div class="head-actions">
+            <select id="log-level" class="select-sm">
+              <option value="">全部级别</option>
+              <option value="info">info</option>
+              <option value="warn">warn</option>
+              <option value="error">error</option>
+              <option value="debug">debug</option>
+            </select>
+            <label class="switch">
+              <input type="checkbox" id="log-follow" checked>
+              <span>实时跟随</span>
+            </label>
+            <button class="btn btn-sm" id="btn-log-clear">清屏</button>
+          </div>
+        </div>
+        <div class="log-view" id="log-view"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-settings">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>代理参数</h2></div>
+          <form id="form-proxy">
+            <label class="field">
+              <span>代理监听地址</span>
+              <input type="text" id="set-proxy-listen" placeholder="0.0.0.0:7710">
+              <small>修改后需要重启应用生效</small>
+            </label>
+            <label class="field">
+              <span>连接超时（毫秒）</span>
+              <input type="number" id="set-connect-timeout" min="1000" max="60000">
+            </label>
+            <label class="field">
+              <span>读取超时（毫秒）</span>
+              <input type="number" id="set-read-timeout" min="5000" max="600000">
+            </label>
+            <label class="field">
+              <span>连续失败摘除阈值</span>
+              <input type="number" id="set-failover" min="1" max="20">
+            </label>
+            <label class="field">
+              <span>摘除冷却时间（秒）</span>
+              <input type="number" id="set-cooldown" min="10" max="3600">
+            </label>
+            <button type="submit" class="btn btn-primary">保存代理参数</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>自动决策参数</h2></div>
+          <form id="form-auto">
+            <label class="field">
+              <span>评估间隔（分钟）</span>
+              <input type="number" id="set-probe-interval" min="5" max="1440">
+            </label>
+            <label class="field">
+              <span>直连优势倍数</span>
+              <input type="number" id="set-direct-ratio" step="0.1" min="1.1" max="10">
+              <small>直连快于加速通道该倍数时回退直连</small>
+            </label>
+            <button type="submit" class="btn btn-primary">保存决策参数</button>
+          </form>
+
+          <div class="divider"></div>
+
+          <div class="card-head"><h2>修改密码</h2></div>
+          <form id="form-password">
+            <label class="field">
+              <span>当前密码</span>
+              <input type="password" id="set-old-pass" autocomplete="current-password">
+            </label>
+            <label class="field">
+              <span>新密码</span>
+              <input type="password" id="set-new-pass" autocomplete="new-password">
+              <small>至少 6 位</small>
+            </label>
+            <button type="submit" class="btn btn-primary">修改密码</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>HTTPS 加速证书</h2>
+          <span class="muted" id="cert-brief"></span>
+        </div>
+        <div class="actions">
+          <a class="btn btn-primary" id="btn-cert-download" href="/api/cert/download">下载证书</a>
+          <button class="btn" id="btn-cert-regenerate">重新生成</button>
+        </div>
+        <p class="muted" style="margin-bottom:0">
+          默认使用程序自动生成的免费本地证书（需在各客户端安装信任一次）。
+          如果有多台设备或想统一证书体系，也可以导入自己的 CA 证书与私钥，导入后立即热生效。
+        </p>
+        <div class="divider"></div>
+        <form id="form-cert-import">
+          <label class="field">
+            <span>CA 证书（PEM）</span>
+            <textarea id="cert-pem" rows="4" class="code-area" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+          </label>
+          <label class="field">
+            <span>CA 私钥（PEM）</span>
+            <textarea id="cert-key" rows="4" class="code-area" placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+            <small>私钥仅保存在本机数据目录，权限 0600，不会上传到任何地方</small>
+          </label>
+          <button type="submit" class="btn btn-primary">导入并替换证书</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-about">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>关于本软件</h2></div>
+          <div class="about" id="about-info"></div>
+          <div class="divider"></div>
+          <div class="actions">
+            <a class="btn btn-primary" id="about-github-link" href="#" target="_blank" rel="noopener">访问作者 GitHub</a>
+            <a class="btn" id="about-repo-link" href="#" target="_blank" rel="noopener">项目仓库</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>网络安全承诺</h2>
+            <span class="muted">为什么不会影响 NAS 与局域网</span>
+          </div>
+          <div class="safety-list" id="about-safety"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>开源致谢</h2>
+          <span class="muted">本系统的实现参考了以下优秀的开源项目与免费资源</span>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th style="width:220px">项目</th><th>贡献</th></tr></thead>
+            <tbody id="about-refs"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="mirror-modal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="card-head">
+      <h2 id="mirror-modal-title">添加上游源</h2>
+      <button class="btn btn-ghost btn-sm" id="modal-close">关闭</button>
+    </div>
+    <form id="mirror-form">
+      <input type="hidden" id="mf-id">
+      <label class="field">
+        <span>名称</span>
+        <input type="text" id="mf-name" placeholder="例如：ghproxy.net" required>
+      </label>
+      <label class="field">
+        <span>地址</span>
+        <input type="text" id="mf-url" placeholder="https://ghproxy.net/" required>
+        <small>前缀型中转填站点根地址，末尾带斜杠</small>
+      </label>
+      <label class="field">
+        <span>类型</span>
+        <select id="mf-kind">
+          <option value="prefix">前缀中转（通用）</option>
+          <option value="raw">Raw 文件 CDN</option>
+          <option value="git">Git 仓库镜像</option>
+          <option value="direct">官方直连</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>权重</span>
+        <input type="number" id="mf-weight" step="0.1" min="0.1" max="10" value="1">
+        <small>数值越大越优先使用</small>
+      </label>
+      <label class="field">
+        <span>备注</span>
+        <input type="text" id="mf-note" placeholder="可选">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="modal-cancel">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

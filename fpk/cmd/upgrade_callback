@@ -1,0 +1,9 @@
+#!/bin/bash
+
+### 升级应用后执行：确保二进制可执行。
+### 数据与配置存放在 TRIM_PKGVAR，升级不会丢失。
+
+BIN="${TRIM_APPDEST}/ghpp"
+chmod +x "${BIN}" 2>/dev/null
+
+exit 0

@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "github-plus-plus.Application": {
+            "title": "GitHub++",
+            "icon": "images/icon-{0}.png",
+            "type": "iframe",
+            "protocol": "http",
+            "port": "7717",
+            "url": "/",
+            "allUsers": false
+        }
+    }
+}

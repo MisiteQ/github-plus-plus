@@ -1,0 +1,43 @@
+#!/bin/bash
+
+### 安装应用后执行：校验架构、补齐可执行权限并记录首次使用信息。
+###
+### 架构校验放这里是为了"早失败、给原因"：
+### 装错架构的包平时只表现为服务起不来、页面拒绝连接，用户无从排查；
+### 在安装阶段直接报错，应用中心会把原因显示出来。
+
+BIN="${TRIM_APPDEST}/ghpp"
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+
+chmod +x "${BIN}" 2>/dev/null
+
+# ELF 机器类型：x86_64=0x3E(3e00)，aarch64=0xB7(b700)，armv7=0x28(2800)。
+bin_arch=$(od -An -tx1 -j18 -N2 "${BIN}" 2>/dev/null | tr -d ' \n')
+case "$(uname -m)" in
+    x86_64)  dev_arch="3e00" ;;
+    aarch64) dev_arch="b700" ;;
+    armv7l|armv8l) dev_arch="2800" ;;
+    *)       dev_arch="unknown" ;;
+esac
+
+arch_name() {
+    case "$1" in
+        3e00) echo "x86_64" ;;
+        b700) echo "aarch64(ARM64)" ;;
+        2800) echo "armv7(32位)" ;;
+        *) echo "未知(${1})" ;;
+    esac
+}
+
+if [ "${bin_arch}" != "${dev_arch}" ] && [ -n "${bin_arch}" ]; then
+    echo "GitHub++ 安装包架构（$(arch_name "${bin_arch}")）与 NAS 设备架构（$(arch_name "${dev_arch}")）不一致，请安装与设备匹配的 fpk 包。" > "${TRIM_TEMP_LOGFILE}" 2>/dev/null
+    exit 1
+fi
+
+{
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - GitHub++ 安装完成（架构 ${bin_arch}）"
+    echo "加速代理端口: 7710"
+    echo "Web 控制台端口: 7717"
+} >> "${LOG_FILE}" 2>/dev/null
+
+exit 0

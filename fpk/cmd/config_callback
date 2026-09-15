@@ -1,0 +1,8 @@
+#!/bin/bash
+
+### 用户在应用设置页修改环境变量后执行：重启服务让变更生效。
+
+"${TRIM_APPDEST}/../cmd/main" stop >/dev/null 2>&1
+"${TRIM_APPDEST}/../cmd/main" start >/dev/null 2>&1
+
+exit 0
