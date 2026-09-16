@@ -43,19 +43,13 @@ curl -LO "http://192.168.31.205:7710/https://raw.githubusercontent.com/git/git/m
 
 Docker 加速：控制台里有说明，把 Docker 的 registry-mirrors 指向 NAS 就行。
 
-## 一个坑
-
-开发时踩过最隐蔽的坑：运营商对 GitHub 不是一刀切封死，而是"放行响应头、掐响应体"——前几 KB 秒开，接着限速到十几 KB/s。看起来像程序 bug，其实是链路被 QoS 了。
-
-所以代理里做了个 512KB 的吞吐探针：往浏览器写数据之前，先验一口上游的真实速度，不达标马上换镜像源。另外还有直连熔断、半开恢复、启动预热这一套，细节在 [internal/proxy/engine.go](internal/proxy/engine.go)，欢迎围观。
-
 ## 从源码构建
 
-需要 Go 1.22+ 和飞牛的 fnpack：
+需要 Go 1.24+ 和飞牛的 fnpack：
 
 ```bash
-./scripts/build.sh           # 本机构建
-./scripts/build-fpk.sh x86   # 交叉编译 + 打包 fpk
+go build -o dist/ghpp ./cmd/ghpp   # 本机构建
+./scripts/build-fpk.sh x86         # 交叉编译 + 打包 fpk
 ./scripts/build-fpk.sh arm
 ```
 
@@ -77,4 +71,4 @@ scripts/         构建与打包脚本
 - MITM 模式的根证书只装在自己的设备上，别外传
 - License: MIT
 
-本项目是本人用 AI 搓出来的——把想法提出来，交给 AI 写，我就负责点确定，然后让它提交、发布，哈哈哈。连上面那个限速的坑，都是让它自己 SSH 上 NAS 一层层抓包查出来的。
+本项目是本人用 AI 搓出来的——把想法提出来，交给 AI 写，我就负责点确定，然后让它提交、发布，哈哈哈......
