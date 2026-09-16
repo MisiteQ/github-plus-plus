@@ -1,5 +1,5 @@
 appname=github-plus-plus
-version=1.0.2
+version=1.0.4
 display_name=GitHub++ 加速器
 desc=为飞牛 NAS 打造的 GitHub / Docker 加速器：智能测速自动选择最优加速通道，支持镜像反代、DNS 优选 hosts 加速、HTTPS 网页加速与 Docker 镜像拉取加速，内置 Web 控制台，在飞牛桌面点击即可打开。默认不影响 NAS 与局域网其他设备的正常联网。
 source=thirdparty
@@ -14,4 +14,4 @@ checkport=true
 ctl_stop=true
 desktop_uidir=ui
 desktop_applaunchname=github-plus-plus.Application
-changelog=1.0.2 直连链路加固：写客户端前的 512KB 吞吐探针识别 QoS 限速、直连快速熔断与半开恢复、启动预热避免重启后首批请求踩慢直连、端到端吞吐兜底熔断，慢链路自动走镜像通道；控制台默认密码改为 admin123 并修复密码未持久化导致重启后无法登录的问题。1.0.1 修复启动问题：桌面图标命名、启动脚本 PID 管理，并新增架构自检（装错架构包时给出明确提示）。1.0.0 首个版本：GitHub 反代加速、DNS 优选 hosts 加速、HTTPS 中间人加速、Docker 拉取加速与 Web 控制台。
+changelog=1.0.4 界面适配修复：侧边栏折叠按钮改为边缘悬浮手柄不再遮挡 Logo；请求分布环形图修正为正圆、圆心数字与标签不再重叠；窄屏下侧边栏自动折叠为图标轨、内容单列；加速源表格列宽优化；静态资源改为 no-cache，升级后界面立即生效。1.0.3 控制台视觉升级：使用真实应用图标、侧边栏支持折叠、新增 8 套主题切换。1.0.2 直连链路加固：写客户端前的 512KB 吞吐探针识别 QoS 限速、直连快速熔断与半开恢复、启动预热避免重启后首批请求踩慢直连、端到端吞吐兜底熔断，慢链路自动走镜像通道；控制台默认密码改为 admin123 并修复密码未持久化导致重启后无法登录的问题。1.0.1 修复启动问题：桌面图标命名、启动脚本 PID 管理，并新增架构自检（装错架构包时给出明确提示）。1.0.0 首个版本：GitHub 反代加速、DNS 优选 hosts 加速、HTTPS 中间人加速、Docker 拉取加速与 Web 控制台。
