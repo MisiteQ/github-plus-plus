@@ -1,5 +1,5 @@
 appname=github-plus-plus
-version=1.0.1
+version=1.0.2
 display_name=GitHub++ 加速器
 desc=为飞牛 NAS 打造的 GitHub / Docker 加速器：智能测速自动选择最优加速通道，支持镜像反代、DNS 优选 hosts 加速、HTTPS 网页加速与 Docker 镜像拉取加速，内置 Web 控制台，在飞牛桌面点击即可打开。默认不影响 NAS 与局域网其他设备的正常联网。
 source=thirdparty
