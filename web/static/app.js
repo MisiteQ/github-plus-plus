@@ -235,7 +235,7 @@ function renderCategoryChart(m) {
   const data = [m.web_count, m.raw_count, m.clone_count, m.docker_count || 0];
   const total = data.reduce((a, b) => a + b, 0);
   const labels = ['网页与 API', '文件下载', '仓库克隆', 'Docker 拉取'];
-  const colors = ['#0969da', '#1a7f37', '#9a6700', '#8250df'];
+  const colors = ['#4f46e5', '#16a34a', '#d97706', '#7c3aed'];
 
   $('legend-cat').innerHTML = labels.map((l, i) => (
     '<span><i style="background:' + colors[i] + '"></i>' + l + ' ' +
@@ -268,10 +268,10 @@ function renderCategoryChart(m) {
     ctx.beginPath();
     ctx.arc(cx, cy, (outer + inner) / 2, 0, Math.PI * 2);
     ctx.lineWidth = outer - inner;
-    ctx.strokeStyle = '#eaeef2';
+    ctx.strokeStyle = '#eef1f6';
     ctx.stroke();
 
-    ctx.fillStyle = '#8b949e';
+    ctx.fillStyle = '#98a0b3';
     ctx.font = '500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -292,13 +292,13 @@ function renderCategoryChart(m) {
   });
 
   // 圆心显示总请求数，比纯图形更有信息量。
-  ctx.fillStyle = '#1f2328';
+  ctx.fillStyle = '#1a1d2e';
   ctx.font = '600 ' + Math.round(size * 0.11) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(total.toLocaleString(), cx, cy + size * 0.015);
 
-  ctx.fillStyle = '#8b949e';
+  ctx.fillStyle = '#98a0b3';
   ctx.font = '400 ' + Math.round(size * 0.055) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.fillText('总请求', cx, cy + size * 0.09);
 }

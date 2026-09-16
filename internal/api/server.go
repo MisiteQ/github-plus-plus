@@ -73,8 +73,9 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 
 		// 安全响应头。
+		// 注意：不设置 X-Frame-Options / CSP frame-ancestors，
+		// 因为控制台需要在飞牛桌面（不同端口）的 iframe 中嵌入展示。
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		w.Header().Set("Referrer-Policy", "same-origin")
 
 		// 控制台自身接口不允许跨站调用，防止 CSRF。
