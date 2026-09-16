@@ -796,6 +796,30 @@ function bindEvents() {
   $('login-form').addEventListener('submit', doLogin);
   $('btn-logout').addEventListener('click', () => doLogout(false));
 
+  // 侧边栏折叠。
+  const sidebar = $('sidebar');
+  const toggleBtn = $('btn-sidebar-toggle');
+  if (sidebar && toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+      localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed') ? '1' : '0');
+    });
+    if (localStorage.getItem('sidebar-collapsed') === '1') sidebar.classList.add('collapsed');
+  }
+
+  // 主题切换。
+  const themeSelect = $('theme-select');
+  const applyTheme = (t) => {
+    document.documentElement.setAttribute('data-theme', t);
+    if (themeSelect) themeSelect.value = t;
+    localStorage.setItem('theme', t);
+  };
+  const savedTheme = localStorage.getItem('theme') || 'indigo';
+  applyTheme(savedTheme);
+  if (themeSelect) {
+    themeSelect.addEventListener('change', () => applyTheme(themeSelect.value));
+  }
+
   $$('.tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       $$('.tab').forEach((t) => t.classList.remove('active'));

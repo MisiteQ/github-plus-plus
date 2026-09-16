@@ -62,9 +62,9 @@ a:hover{text-decoration:underline}
 .login-bg{
   position:absolute;inset:0;z-index:-1;
   background:
-    radial-gradient(circle at 20% 20%,rgba(79,70,229,.12),transparent 45%),
-    radial-gradient(circle at 80% 70%,rgba(99,102,241,.10),transparent 40%),
-    linear-gradient(180deg,#f5f6fb 0%,#ebeef7 100%);
+    radial-gradient(circle at 20% 20%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 45%),
+    radial-gradient(circle at 80% 70%,color-mix(in srgb,var(--accent) 10%,transparent),transparent 40%),
+    linear-gradient(180deg,var(--bg) 0%,color-mix(in srgb,var(--accent) 6%,var(--bg)) 100%);
 }
 
 .login-card{
@@ -84,13 +84,15 @@ a:hover{text-decoration:underline}
 .login-head{text-align:center;margin-bottom:28px}
 
 .logo-big{
-  width:64px;height:64px;
+  width:72px;height:72px;
   margin:0 auto 16px;
-  border-radius:16px;
-  background:linear-gradient(135deg,var(--accent) 0%,#7c3aed 100%);
+  border-radius:18px;
+  overflow:hidden;
+  background:#000;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 8px 20px rgba(79,70,229,.35);
+  box-shadow:0 8px 20px rgba(0,0,0,.25);
 }
+.logo-big img{width:100%;height:100%;object-fit:cover;display:block}
 
 .login-head h1{font-size:24px;margin:0 0 6px}
 .login-head p{margin:0;color:var(--text-dim);font-size:13.5px}
@@ -129,27 +131,55 @@ a:hover{text-decoration:underline}
   position:sticky;
   top:0;
   height:100vh;
+  transition:width .25s ease;
+  overflow:hidden;
 }
+.sidebar.collapsed{width:68px}
 
 .brand{
   display:flex;
   align-items:center;
   gap:12px;
-  padding:20px 20px;
+  padding:16px 16px;
   border-bottom:1px solid var(--border-soft);
+  position:relative;
+  min-height:64px;
 }
 
 .logo{
-  width:38px;height:38px;
+  width:40px;height:40px;
   border-radius:10px;
-  background:linear-gradient(135deg,var(--accent) 0%,#7c3aed 100%);
+  overflow:hidden;
+  background:#000;
   display:flex;align-items:center;justify-content:center;
   flex-shrink:0;
-  box-shadow:0 4px 10px rgba(79,70,229,.3);
+  box-shadow:0 2px 8px rgba(0,0,0,.15);
 }
+.logo img{width:100%;height:100%;object-fit:cover;display:block}
 
+.brand-text{flex:1;min-width:0;transition:opacity .2s}
 .brand-text strong{display:block;font-size:15px;font-weight:700;color:var(--text)}
 .brand-text small{display:block;font-size:11.5px;color:var(--text-faint);margin-top:1px}
+.sidebar.collapsed .brand-text{opacity:0;pointer-events:none;width:0}
+
+.sidebar-toggle{
+  position:absolute;
+  right:8px;top:50%;
+  transform:translateY(-50%);
+  width:22px;height:22px;
+  border-radius:6px;
+  border:none;
+  background:var(--surface-hover);
+  color:var(--text-dim);
+  font-size:14px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;
+  line-height:1;
+}
+.sidebar-toggle:hover{background:var(--accent-soft);color:var(--accent)}
+.sidebar.collapsed .sidebar-toggle{transform:translateY(-50%) rotate(180deg)}
+.sidebar.collapsed .sidebar-toggle{right:50%;margin-right:-11px}
 
 .tabs{
   flex:1;
@@ -158,6 +188,7 @@ a:hover{text-decoration:underline}
   gap:2px;
   padding:12px 12px;
   overflow-y:auto;
+  overflow-x:hidden;
 }
 
 .tab{
@@ -183,6 +214,7 @@ a:hover{text-decoration:underline}
   font-style:normal;
   font-size:15px;
   opacity:.85;
+  flex-shrink:0;
 }
 
 .tab:hover{background:var(--surface-hover);color:var(--text)}
@@ -190,7 +222,7 @@ a:hover{text-decoration:underline}
 .tab.active .nav-icon{opacity:1}
 
 .sidebar-foot{
-  padding:14px 16px;
+  padding:12px 12px;
   border-top:1px solid var(--border-soft);
   display:flex;
   flex-direction:column;
@@ -203,15 +235,37 @@ a:hover{text-decoration:underline}
   background:var(--surface-hover);
   border-radius:var(--radius);
   font-size:12.5px;
+  white-space:nowrap;
 }
+.sidebar.collapsed .run-status{justify-content:center;padding:8px}
 
-.run-label{color:var(--text-dim)}
+.run-label{color:var(--text-dim);transition:opacity .2s}
+.sidebar.collapsed .run-label{opacity:0;width:0;overflow:hidden}
+
+.theme-picker{
+  display:flex;align-items:center;gap:8px;
+  padding:0 4px;
+  white-space:nowrap;
+}
+.theme-label{
+  display:flex;align-items:center;gap:8px;
+  font-size:12.5px;color:var(--text-dim);
+  flex-shrink:0;
+}
+.theme-select{
+  flex:1;
+  min-width:0;
+  padding:4px 6px;
+  font-size:12px;
+}
+.sidebar.collapsed .theme-picker{display:none}
 
 .dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex-shrink:0}
 .dot.on{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
 .dot.off{background:var(--red);box-shadow:0 0 0 3px var(--red-soft)}
 
-.btn-logout{justify-content:center}
+.btn-logout{justify-content:center;white-space:nowrap}
+.sidebar.collapsed .btn-logout span{display:none}
 
 /* ---------- 主内容区 ---------- */
 .main{
@@ -679,3 +733,111 @@ input:focus,select:focus,textarea:focus{
   .toast-wrap{left:14px;right:14px;bottom:14px}
   .toast{max-width:none}
 }
+
+/* ============================================================
+   主题：通过 [data-theme="xxx"] 切换 CSS 变量
+   ============================================================ */
+
+/* 1. 靛蓝（默认）— 已由 :root 定义，此处显式声明 */
+[data-theme="indigo"]{
+  --bg:#f5f6fb; --surface:#fff; --surface-hover:#f8f9fc;
+  --border:#e8ebf2; --border-soft:#eef1f6;
+  --text:#1a1d2e; --text-dim:#6b7180; --text-faint:#98a0b3;
+  --accent:#4f46e5; --accent-hover:#4338ca;
+  --accent-soft:#eef2ff; --accent-soft-2:#e0e7ff;
+  --green:#16a34a; --green-soft:#dcfce7;
+  --amber:#d97706; --amber-soft:#fef3c7;
+  --red:#dc2626; --red-soft:#fee2e2;
+}
+
+/* 2. 深色 */
+[data-theme="dark"]{
+  --bg:#0f1117; --surface:#1a1d29; --surface-hover:#232736;
+  --border:#2d3142; --border-soft:#262a38;
+  --text:#e8eaf0; --text-dim:#9da3b5; --text-faint:#6b7180;
+  --accent:#818cf8; --accent-hover:#a5b4fc;
+  --accent-soft:#312e81; --accent-soft-2:#3730a3;
+  --green:#4ade80; --green-soft:#14532d;
+  --amber:#fbbf24; --amber-soft:#78350f;
+  --red:#f87171; --red-soft:#7f1d1d;
+}
+
+/* 3. GitHub 深色 */
+[data-theme="github"]{
+  --bg:#0d1117; --surface:#161b22; --surface-hover:#1c2128;
+  --border:#30363d; --border-soft:#21262d;
+  --text:#e6edf3; --text-dim:#8b949e; --text-faint:#6e7681;
+  --accent:#2f81f7; --accent-hover:#58a6ff;
+  --accent-soft:#1f3a5f; --accent-soft-2:#2a4a7f;
+  --green:#3fb950; --green-soft:#0d2818;
+  --amber:#d29922; --amber-soft:#3a2a00;
+  --red:#f85149; --red-soft:#490202;
+}
+
+/* 4. 海洋蓝 */
+[data-theme="ocean"]{
+  --bg:#f0f7fb; --surface:#fff; --surface-hover:#f4f9fc;
+  --border:#dbe9f2; --border-soft:#eaf3f9;
+  --text:#0c2233; --text-dim:#4a6577; --text-faint:#7d97a8;
+  --accent:#0284c7; --accent-hover:#0369a1;
+  --accent-soft:#e0f2fe; --accent-soft-2:#bae6fd;
+  --green:#16a34a; --green-soft:#dcfce7;
+  --amber:#d97706; --amber-soft:#fef3c7;
+  --red:#dc2626; --red-soft:#fee2e2;
+}
+
+/* 5. 森林绿 */
+[data-theme="forest"]{
+  --bg:#f1f8f2; --surface:#fff; --surface-hover:#f4faf5;
+  --border:#d6e8d9; --border-soft:#e7f1e9;
+  --text:#142818; --text-dim:#4a6b51; --text-faint:#7d9982;
+  --accent:#16a34a; --accent-hover:#15803d;
+  --accent-soft:#dcfce7; --accent-soft-2:#bbf7d0;
+  --green:#15803d; --green-soft:#bbf7d0;
+  --amber:#d97706; --amber-soft:#fef3c7;
+  --red:#dc2626; --red-soft:#fee2e2;
+}
+
+/* 6. 日落橙 */
+[data-theme="sunset"]{
+  --bg:#fbf6f1; --surface:#fff; --surface-hover:#fdf8f3;
+  --border:#ecd9c8; --border-soft:#f3e8dc;
+  --text:#2d1d0f; --text-dim:#7a5a3f; --text-faint:#a88868;
+  --accent:#ea580c; --accent-hover:#c2410c;
+  --accent-soft:#fff7ed; --accent-soft-2:#ffedd5;
+  --green:#16a34a; --green-soft:#dcfce7;
+  --amber:#d97706; --amber-soft:#fef3c7;
+  --red:#dc2626; --red-soft:#fee2e2;
+}
+
+/* 7. 玫瑰红 */
+[data-theme="rose"]{
+  --bg:#fbf2f4; --surface:#fff; --surface-hover:#fdf5f7;
+  --border:#ecd2d8; --border-soft:#f3e2e6;
+  --text:#2d1118; --text-dim:#7a4a55; --text-faint:#a87888;
+  --accent:#e11d48; --accent-hover:#be123c;
+  --accent-soft:#fff1f2; --accent-soft-2:#ffe4e6;
+  --green:#16a34a; --green-soft:#dcfce7;
+  --amber:#d97706; --amber-soft:#fef3c7;
+  --red:#dc2626; --red-soft:#fee2e2;
+}
+
+/* 8. 午夜紫 */
+[data-theme="midnight"]{
+  --bg:#131022; --surface:#1c1832; --surface-hover:#262142;
+  --border:#362f54; --border-soft:#2a2542;
+  --text:#e8e4f5; --text-dim:#9d97b8; --text-faint:#6b6585;
+  --accent:#a78bfa; --accent-hover:#c4b5fd;
+  --accent-soft:#3b2f6b; --accent-soft-2:#4c3d82;
+  --green:#4ade80; --green-soft:#1a3d2a;
+  --amber:#fbbf24; --amber-soft:#3d2e10;
+  --red:#f87171; --red-soft:#3d1520;
+}
+
+/* 深色主题下调整代码区与日志区背景 */
+[data-theme="dark"] .code-area,
+[data-theme="github"] .code-area,
+[data-theme="midnight"] .code-area{background:#0f1117;border-color:var(--border)}
+[data-theme="dark"] .log-view,
+[data-theme="github"] .log-view,
+[data-theme="midnight"] .log-view{background:#0a0c12}

@@ -81,6 +81,9 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		// 控制台自身接口不允许跨站调用，防止 CSRF。
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Cache-Control", "no-store")
+		} else {
+			// 静态资源（HTML/CSS/JS/图片）禁止强缓存，保证更新后立即生效。
+			w.Header().Set("Cache-Control", "no-cache")
 		}
 
 		next.ServeHTTP(w, r)
