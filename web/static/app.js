@@ -231,28 +231,44 @@ function renderStatus() {
   renderConnectList(s);
 }
 
+const CHART_COLORS = ['#4f46e5', '#16a34a', '#d97706', '#7c3aed'];
+const CHART_LABELS = ['网页与 API', '文件下载', '仓库克隆', 'Docker 拉取'];
+
 function renderCategoryChart(m) {
   const data = [m.web_count, m.raw_count, m.clone_count, m.docker_count || 0];
   const total = data.reduce((a, b) => a + b, 0);
-  const labels = ['网页与 API', '文件下载', '仓库克隆', 'Docker 拉取'];
-  const colors = ['#4f46e5', '#16a34a', '#d97706', '#7c3aed'];
 
-  $('legend-cat').innerHTML = labels.map((l, i) => (
-    '<span><i style="background:' + colors[i] + '"></i>' + l + ' ' +
+  $('legend-cat').innerHTML = CHART_LABELS.map((l, i) => (
+    '<span><i style="background:' + CHART_COLORS[i] + '"></i>' + l + ' ' +
     (total > 0 ? Math.round(data[i] / total * 100) : 0) + '%</span>'
   )).join('');
 
+  // 缓存数据，供窗口尺寸变化时重绘。
+  state.chartData = data;
+  drawCategoryChart();
+}
+
+function drawCategoryChart() {
   const canvas = $('chart-cat');
-  if (!canvas) return;
+  if (!canvas || !state.chartData) return;
+  const data = state.chartData;
+  const total = data.reduce((a, b) => a + b, 0);
+
+  // 从当前主题读取文字/占位色，保证深色主题下可读。
+  const css = getComputedStyle(document.documentElement);
+  const textColor = css.getPropertyValue('--text').trim() || '#1a1d2e';
+  const faintColor = css.getPropertyValue('--text-faint').trim() || '#98a0b3';
+  const trackColor = css.getPropertyValue('--border-soft').trim() || '#eef1f6';
 
   // 用内联 Canvas 绘制环形图，避免引入任何外部依赖。
+  // 关键：CSS 尺寸必须与绘图坐标系同为正方形，否则环形会被拉伸成椭圆。
   const dpr = window.devicePixelRatio || 1;
   const box = canvas.parentElement.getBoundingClientRect();
-  const size = Math.max(120, Math.min(box.width, box.height));
+  const size = Math.max(140, Math.floor(Math.min(box.width, box.height)));
   canvas.width = size * dpr;
   canvas.height = size * dpr;
-  canvas.style.width = '100%';
-  canvas.style.height = '100%';
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
 
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -268,16 +284,23 @@ function renderCategoryChart(m) {
     ctx.beginPath();
     ctx.arc(cx, cy, (outer + inner) / 2, 0, Math.PI * 2);
     ctx.lineWidth = outer - inner;
-    ctx.strokeStyle = '#eef1f6';
+    ctx.strokeStyle = trackColor;
     ctx.stroke();
 
-    ctx.fillStyle = '#98a0b3';
-    ctx.font = '500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = faintColor;
+    ctx.font = '500 ' + Math.round(size * 0.085) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('暂无请求', cx, cy);
     return;
   }
+
+  // 先画一圈底环，避免 100% 单分类时起点/终点接缝发虚。
+  ctx.beginPath();
+  ctx.arc(cx, cy, (outer + inner) / 2, 0, Math.PI * 2);
+  ctx.lineWidth = outer - inner;
+  ctx.strokeStyle = trackColor;
+  ctx.stroke();
 
   let start = -Math.PI / 2;
   data.forEach((v, i) => {
@@ -286,21 +309,30 @@ function renderCategoryChart(m) {
     ctx.beginPath();
     ctx.arc(cx, cy, (outer + inner) / 2, start, start + angle);
     ctx.lineWidth = outer - inner;
-    ctx.strokeStyle = colors[i];
+    ctx.strokeStyle = CHART_COLORS[i];
     ctx.stroke();
     start += angle;
   });
 
-  // 圆心显示总请求数，比纯图形更有信息量。
-  ctx.fillStyle = '#1a1d2e';
-  ctx.font = '600 ' + Math.round(size * 0.11) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  // 圆心显示总请求数（数字 + 标签垂直居中排布）。
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(total.toLocaleString(), cx, cy + size * 0.015);
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = textColor;
+  ctx.font = '700 ' + Math.round(size * 0.15) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText(total.toLocaleString(), cx, cy - size * 0.045);
 
-  ctx.fillStyle = '#98a0b3';
-  ctx.font = '400 ' + Math.round(size * 0.055) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.fillText('总请求', cx, cy + size * 0.09);
+  ctx.fillStyle = faintColor;
+  ctx.font = '400 ' + Math.round(size * 0.07) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText('总请求', cx, cy + size * 0.075);
+}
+
+// 侧边栏折叠/窗口缩放会改变图形容器宽度，防抖重绘。
+let chartResizeTimer = null;
+function scheduleChartRedraw() {
+  clearTimeout(chartResizeTimer);
+  chartResizeTimer = setTimeout(() => {
+    if ($('panel-overview').classList.contains('active')) drawCategoryChart();
+  }, 200);
 }
 
 function renderConnectList(s) {
@@ -396,7 +428,7 @@ function renderMirrors() {
       '<td><span class="badge">' + esc(KIND_NAMES[m.kind] || m.kind) + '</span></td>' +
       '<td class="mono">' + fmtLatency(st.latency_ms) + '</td>' +
       '<td class="mono">' + fmtSpeed(st.throughput_kbps) + '</td>' +
-      '<td><span class="score-bar"><i style="width:' + score + '%"></i></span>' +
+      '<td class="score-cell"><span class="score-bar"><i style="width:' + score + '%"></i></span>' +
         '<span class="mono">' + Math.round(score) + '</span></td>' +
       '<td><div class="row-actions">' +
         '<button class="btn btn-sm" data-test="' + esc(m.id) + '">测速</button>' +
@@ -803,9 +835,27 @@ function bindEvents() {
     toggleBtn.addEventListener('click', () => {
       sidebar.classList.toggle('collapsed');
       localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed') ? '1' : '0');
+      scheduleChartRedraw();
     });
     if (localStorage.getItem('sidebar-collapsed') === '1') sidebar.classList.add('collapsed');
+
+    // 窄屏（≤960px）自动折叠为图标轨；回到宽屏时恢复用户偏好。
+    const bp = window.matchMedia('(max-width: 960px)');
+    const syncByViewport = (e) => {
+      if (e.matches) {
+        sidebar.classList.add('collapsed');
+      } else if (localStorage.getItem('sidebar-collapsed') !== '1') {
+        sidebar.classList.remove('collapsed');
+      }
+      scheduleChartRedraw();
+    };
+    if (bp.addEventListener) bp.addEventListener('change', syncByViewport);
+    else bp.addListener(syncByViewport);
+    if (bp.matches) sidebar.classList.add('collapsed');
   }
+
+  // 窗口尺寸变化时重绘图表（防抖）。
+  window.addEventListener('resize', scheduleChartRedraw);
 
   // 主题切换。
   const themeSelect = $('theme-select');
@@ -813,6 +863,7 @@ function bindEvents() {
     document.documentElement.setAttribute('data-theme', t);
     if (themeSelect) themeSelect.value = t;
     localStorage.setItem('theme', t);
+    drawCategoryChart();
   };
   const savedTheme = localStorage.getItem('theme') || 'indigo';
   applyTheme(savedTheme);

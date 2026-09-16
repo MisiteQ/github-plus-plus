@@ -131,8 +131,8 @@ a:hover{text-decoration:underline}
   position:sticky;
   top:0;
   height:100vh;
+  z-index:30;
   transition:width .25s ease;
-  overflow:hidden;
 }
 .sidebar.collapsed{width:68px}
 
@@ -140,11 +140,12 @@ a:hover{text-decoration:underline}
   display:flex;
   align-items:center;
   gap:12px;
-  padding:16px 16px;
+  padding:18px 20px;
   border-bottom:1px solid var(--border-soft);
-  position:relative;
-  min-height:64px;
+  min-height:72px;
+  flex-shrink:0;
 }
+.sidebar.collapsed .brand{justify-content:center;padding:18px 0}
 
 .logo{
   width:40px;height:40px;
@@ -157,29 +158,40 @@ a:hover{text-decoration:underline}
 }
 .logo img{width:100%;height:100%;object-fit:cover;display:block}
 
-.brand-text{flex:1;min-width:0;transition:opacity .2s}
-.brand-text strong{display:block;font-size:15px;font-weight:700;color:var(--text)}
-.brand-text small{display:block;font-size:11.5px;color:var(--text-faint);margin-top:1px}
+.brand-text{flex:1;min-width:0;overflow:hidden;transition:opacity .2s}
+.brand-text strong{display:block;font-size:15px;font-weight:700;color:var(--text);white-space:nowrap}
+.brand-text small{display:block;font-size:11.5px;color:var(--text-faint);margin-top:1px;white-space:nowrap}
 .sidebar.collapsed .brand-text{opacity:0;pointer-events:none;width:0}
 
+/* 折叠手柄：悬浮在侧边栏右边缘的圆形按钮，展开/折叠两种状态都不遮挡 logo */
 .sidebar-toggle{
   position:absolute;
-  right:8px;top:50%;
-  transform:translateY(-50%);
-  width:22px;height:22px;
-  border-radius:6px;
-  border:none;
-  background:var(--surface-hover);
+  top:30px;
+  right:-12px;
+  z-index:40;
+  width:24px;height:24px;
+  border-radius:50%;
+  border:1px solid var(--border);
+  background:var(--surface);
   color:var(--text-dim);
-  font-size:14px;
   cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  transition:all .2s;
-  line-height:1;
+  box-shadow:var(--shadow-sm);
+  transition:background .15s,color .15s,border-color .15s;
+  padding:0;
 }
-.sidebar-toggle:hover{background:var(--accent-soft);color:var(--accent)}
-.sidebar.collapsed .sidebar-toggle{transform:translateY(-50%) rotate(180deg)}
-.sidebar.collapsed .sidebar-toggle{right:50%;margin-right:-11px}
+.sidebar-toggle:hover{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#fff;
+}
+.toggle-chevron{
+  font-size:13px;
+  line-height:1;
+  font-style:normal;
+  transition:transform .25s ease;
+}
+.sidebar.collapsed .toggle-chevron{transform:rotate(180deg)}
 
 .tabs{
   flex:1;
@@ -190,6 +202,7 @@ a:hover{text-decoration:underline}
   overflow-y:auto;
   overflow-x:hidden;
 }
+.sidebar.collapsed .tabs{padding:12px 10px}
 
 .tab{
   display:flex;
@@ -206,7 +219,9 @@ a:hover{text-decoration:underline}
   font-family:inherit;
   text-align:left;
   transition:background .12s,color .12s;
+  overflow:hidden;
 }
+.sidebar.collapsed .tab{justify-content:center;padding:10px 0}
 
 .nav-icon{
   width:20px;
@@ -216,6 +231,8 @@ a:hover{text-decoration:underline}
   opacity:.85;
   flex-shrink:0;
 }
+.tab span{overflow:hidden}
+.sidebar.collapsed .tab span{display:none}
 
 .tab:hover{background:var(--surface-hover);color:var(--text)}
 .tab.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
@@ -227,7 +244,9 @@ a:hover{text-decoration:underline}
   display:flex;
   flex-direction:column;
   gap:10px;
+  flex-shrink:0;
 }
+.sidebar.collapsed .sidebar-foot{padding:12px 10px;align-items:stretch}
 
 .run-status{
   display:flex;align-items:center;gap:8px;
@@ -236,11 +255,12 @@ a:hover{text-decoration:underline}
   border-radius:var(--radius);
   font-size:12.5px;
   white-space:nowrap;
+  overflow:hidden;
 }
-.sidebar.collapsed .run-status{justify-content:center;padding:8px}
+.sidebar.collapsed .run-status{justify-content:center;padding:8px 0}
 
-.run-label{color:var(--text-dim);transition:opacity .2s}
-.sidebar.collapsed .run-label{opacity:0;width:0;overflow:hidden}
+.run-label{color:var(--text-dim);transition:opacity .2s;overflow:hidden}
+.sidebar.collapsed .run-label{opacity:0;width:0}
 
 .theme-picker{
   display:flex;align-items:center;gap:8px;
@@ -275,7 +295,7 @@ a:hover{text-decoration:underline}
   flex-direction:column;
 }
 
-.content{padding:28px 32px;max-width:1280px;width:100%}
+.content{padding:28px 32px;max-width:1480px;width:100%;margin:0 auto}
 
 .page-head{
   display:flex;
@@ -480,7 +500,8 @@ input:focus,select:focus,textarea:focus{
 .actions{display:flex;gap:8px;flex-wrap:wrap}
 
 /* ---------- 图表 ---------- */
-.chart-box{position:relative;height:200px}
+.chart-box{position:relative;height:200px;display:flex;align-items:center;justify-content:center}
+.chart-box canvas{display:block}
 .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-size:12.5px;color:var(--text-dim)}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
@@ -521,6 +542,8 @@ input:focus,select:focus,textarea:focus{
   background:var(--surface-hover);
   color:var(--text-dim);
   border:1px solid var(--border-soft);
+  white-space:nowrap;
+  vertical-align:middle;
 }
 
 .badge-ok{background:var(--green-soft);color:var(--green);border-color:transparent}
@@ -538,6 +561,8 @@ input:focus,select:focus,textarea:focus{
   margin-right:8px;
 }
 .score-bar i{display:block;height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
+.score-cell{white-space:nowrap}
+.row-actions{white-space:nowrap}
 
 .src-cell{display:flex;align-items:center;gap:10px;min-width:150px}
 .src-cell .meta{min-width:0}
@@ -714,22 +739,25 @@ input:focus,select:focus,textarea:focus{
 /* ---------- 响应式 ---------- */
 @media (max-width:960px){
   .grid-2{grid-template-columns:minmax(0,1fr)}
-  .sidebar{width:64px}
-  .brand-text,.tab span:not(.nav-icon),.run-label,.btn-logout span{display:none}
-  .tab{justify-content:center;padding:12px}
-  .brand{justify-content:center;padding:16px 10px}
-  .sidebar-foot{align-items:center}
   .content{padding:20px 18px}
-  .table-wrap{margin:0 -20px;padding:0 20px}
 }
 
 @media (max-width:600px){
+  /* 手机端强制图标轨，折叠手柄隐藏 */
+  .sidebar{width:68px !important}
+  .brand{justify-content:center;padding:18px 0}
+  .brand-text,.tab span,.run-label,.btn-logout span{display:none !important}
+  .tab{justify-content:center;padding:10px 0}
+  .theme-picker{display:none !important}
+  .run-status{justify-content:center;padding:8px 0}
+  .sidebar-toggle{display:none}
   .content{padding:16px 14px}
   .page-head{flex-direction:column;align-items:stretch}
   .head-actions{width:100%}
   .head-actions .btn{flex:1}
   .metrics{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
   .metric .value{font-size:22px}
+  .mode-picker{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
   .toast-wrap{left:14px;right:14px;bottom:14px}
   .toast{max-width:none}
 }

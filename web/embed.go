@@ -62,13 +62,14 @@ func serveIndex(w http.ResponseWriter, r *http.Request, sub fs.FS) {
 
 // setCacheHeaders 依据文件类型设置缓存策略。
 //
-// 首页不缓存以便更新后立即生效，其他静态资源可长时间缓存。
+// HTML/CSS/JS 一律不强缓存（每次带 ETag 协商即可），保证版本更新后浏览器立即拿到新资源；
+// 图片等资源可长缓存，需要更新时由 index.html 里的 ?v= 版本号破缓存。
 func setCacheHeaders(w http.ResponseWriter, path string) {
 	switch {
-	case strings.HasSuffix(path, ".html"):
-		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-	case strings.HasSuffix(path, ".css"), strings.HasSuffix(path, ".js"):
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+	case strings.HasSuffix(path, ".html"),
+		strings.HasSuffix(path, ".css"),
+		strings.HasSuffix(path, ".js"):
+		w.Header().Set("Cache-Control", "no-cache")
 	default:
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 	}

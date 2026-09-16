@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GitHub++ 加速器</title>
-<link rel="icon" type="image/png" href="/favicon.png?v=1.0.2">
-<link rel="stylesheet" href="/style.css?v=1.0.2">
+<link rel="icon" type="image/png" href="/favicon.png?v=1.0.3">
+<link rel="stylesheet" href="/style.css?v=1.0.3">
 <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'indigo')}catch(e){}</script>
 </head>
 <body>
@@ -14,7 +14,7 @@
   <div class="login-bg"></div>
   <form class="login-card" id="login-form">
     <div class="login-head">
-      <div class="logo-big"><img src="/logo.png?v=1.0.2" alt="GitHub++"></div>
+      <div class="logo-big"><img src="/logo.png?v=1.0.3" alt="GitHub++"></div>
       <h1>GitHub++</h1>
       <p>飞牛 NAS GitHub 加速器</p>
     </div>
@@ -34,13 +34,15 @@
 
 <div id="app-view" hidden>
   <aside class="sidebar" id="sidebar">
+    <button class="sidebar-toggle" id="btn-sidebar-toggle" title="折叠侧边栏" aria-label="折叠侧边栏">
+      <span class="toggle-chevron">⟨</span>
+    </button>
     <div class="brand">
-      <div class="logo"><img src="/logo.png?v=1.0.2" alt="GitHub++"></div>
+      <div class="logo"><img src="/logo.png?v=1.0.3" alt="GitHub++"></div>
       <div class="brand-text">
         <strong>GitHub++</strong>
         <small>加速器控制台</small>
       </div>
-      <button class="sidebar-toggle" id="btn-sidebar-toggle" title="折叠侧边栏">«</button>
     </div>
 
     <nav class="tabs" role="tablist">
@@ -161,11 +163,11 @@
               <tr>
                 <th style="width:32px"></th>
                 <th>名称</th>
-                <th style="width:88px">类型</th>
-                <th style="width:80px">延迟</th>
+                <th style="width:100px">类型</th>
+                <th style="width:86px">延迟</th>
                 <th style="width:96px">吞吐</th>
-                <th style="width:96px">得分</th>
-                <th style="width:132px">操作</th>
+                <th style="width:112px">得分</th>
+                <th style="width:156px">操作</th>
               </tr>
             </thead>
             <tbody id="mirror-body"></tbody>
@@ -518,6 +520,6 @@
 
 <div class="toast-wrap" id="toast-wrap"></div>
 
-<script src="/app.js?v=1.0.2"></script>
+<script src="/app.js?v=1.0.3"></script>
 </body>
 </html>
