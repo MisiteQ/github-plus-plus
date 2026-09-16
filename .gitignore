@@ -10,3 +10,6 @@ ghpp.exe
 # 本地工具与杂项
 .workbuddy/
 *.log
+
+# 本机 TRAE 工作区配置（技能等，含本机绝对路径）
+.trae/
