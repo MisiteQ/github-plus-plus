@@ -1,9 +1,19 @@
-# GitHub++ 加速器 (github-plus-plus)
+# GitHub++ 加速器 github-plus-plus
 
-[![Release](https://img.shields.io/github/v/release/MisiteQ/github-plus-plus)](https://github.com/MisiteQ/github-plus-plus/releases)
-[![Platform](https://img.shields.io/badge/platform-fnOS%20x86%20%7C%20ARM-blue)](https://github.com/MisiteQ/github-plus-plus/releases)
+<p>
+  <img alt="Version" src="https://img.shields.io/badge/version-1.0.4-blue">
+  <img alt="fnOS" src="https://img.shields.io/badge/fnOS-x86%20%7C%20arm64-success">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-orange">
+</p>
 
 飞牛 fnOS 上的 GitHub / Docker 加速器（FPK 原生应用）：让闲着的 NAS 当局域网加速跳板，家里所有设备直接用。内置十几个社区公益加速通道，**智能测速自动择优、故障源自动冷却切换**；支持 **Git 克隆 / 网页加速 / Release·raw 下载 / Docker 拉取** 全链路加速。对 API 这类必须直连的域名做了熔断——写客户端前先用 512KB 吞吐探针识别运营商 QoS 限速（"放行响应头、掐响应体"），慢链路自动切镜像，直连恢复后自动切回，全过程无感。Go 单二进制 + 单页前端，**默认不影响 NAS 与局域网其他设备的正常联网**。
+
+- 当前版本：**v1.0.4**
+- 作者：**MisiteQ**
+- 适用平台：fnOS **x86 + arm64**（最低系统版本 1.0.0）
+- 默认端口：**7717**（控制台）、**7710**（代理）
+- 默认账号：`admin` / `admin123`（登录后请及时修改）
+- 运行身份：**root**（hosts 加速需写 /etc/hosts）
 
 ## ✨ 功能
 
@@ -16,15 +26,21 @@
 
 ## 📦 安装
 
-1. 到 [Releases](https://github.com/MisiteQ/github-plus-plus/releases) 下载对应架构的 `.fpk`（x86 / arm）
+### 方式一：FnDepot 应用源（推荐）
+
+在飞牛 fnOS 上安装 [FnDepot](https://github.com/EWEDLCM/FnDepot) 客户端后，添加作者的应用源即可搜索「GitHub++」一键安装 / 升级：
+
+```
+https://github.com/MisiteQ/FnDepot
+```
+
+### 方式二：手动安装 FPK
+
+1. 到 [Releases](https://github.com/MisiteQ/github-plus-plus/releases) 按 NAS 架构下载：`github-plus-plus_1.0.4_x86.fpk`（x86 机型）或 `github-plus-plus_1.0.4_arm.fpk`（arm64 机型）
 2. 飞牛 OS → **应用中心** → 左下角 **手动安装** → 选择 fpk 文件
-3. 安装后桌面打开 **GitHub++**，或直接访问 `http://<NAS_IP>:7717`
+3. 安装后从桌面打开 **GitHub++**，或直接访问 `http://<NAS_IP>:7717`
 
 > 若「手动安装」入口被关闭，SSH 执行：`appcenter-cli manual-install enable`
-
-也可在 FnDepot 客户端添加应用源 `https://github.com/MisiteQ/FnDepot` 后搜索「GitHub++」一键安装。
-
-默认账号 `admin`，密码 `admin123`（登录后请及时修改）。
 
 ## 🚀 使用
 
@@ -47,7 +63,7 @@ Docker 加速：控制台里有说明，把 Docker 的 registry-mirrors 指向 N
 
 ## 🛠 从源码构建
 
-需要 Go 1.24+ 和飞牛的 fnpack（见 https://developer.fnnas.com/docs/cli/fnpack/ ）：
+需要 Go 1.24+ 和 [fnpack](https://developer.fnnas.com/docs/cli/fnpack/) 命令行工具：
 
 ```bash
 go build -o dist/ghpp ./cmd/ghpp   # 本机构建
@@ -57,7 +73,30 @@ go build -o dist/ghpp ./cmd/ghpp   # 本机构建
 
 产物在 `dist/` 目录。
 
-## 📋 近期更新
+## 📁 项目结构
+
+```
+manifest                飞牛应用清单（版本、显示名、端口、权限、更新日志）
+fpk/                    fnOS 打包模板与生命周期脚本（安装回调、启动、卸载清理等）
+cmd/ghpp/               程序入口
+internal/               核心：反代引擎、镜像池、DNS 优选、熔断器、控制台 API 等
+web/                    控制台前端（单页，8 套主题）
+scripts/                构建与打包脚本（build-fpk.sh、图标生成等）
+config/                 飞牛权限与资源声明（以 root 运行）
+```
+
+## 🔒 隐私与安全
+
+- 代理服务仅在局域网监听，不对外网暴露，所有流量仅经 NAS 中转，**不上传任何数据到第三方服务器**
+- MITM 模式的根证书仅安装在你自己的设备上，别外传；hosts 模式无需证书即可全局加速
+- 加速通道为社区公益服务，程序仅做透明反代，不缓存、不篡改、不注入任何内容
+
+## 🙏 致谢
+
+- 社区公益加速通道提供者（ghfast.top、gh-proxy.com 等）
+- 飞牛 fnOS 与 [FnDepot](https://github.com/EWEDLCM/FnDepot)
+
+## 📋 版本历史
 
 | 版本 | 内容 |
 |---|---|
@@ -69,16 +108,6 @@ go build -o dist/ghpp ./cmd/ghpp   # 本机构建
 
 完整日志见 [Releases](https://github.com/MisiteQ/github-plus-plus/releases)。
 
-## 结构
+## 📄 许可证
 
-```
-cmd/ghpp/          程序入口
-internal/          核心：反代引擎、镜像池、DNS 优选、控制台 API 等
-web/               控制台前端（单页）
-fpk/               fnOS 打包模板与生命周期脚本
-scripts/           构建与打包脚本
-```
-
----
-
-MIT © [MisiteQ](https://github.com/MisiteQ)
+[MIT License](LICENSE) © 2026 MisiteQ
