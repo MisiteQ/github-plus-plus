@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/ghpp/ghpp/internal/hostsfile"
 	"github.com/ghpp/ghpp/internal/logbus"
 	"github.com/ghpp/ghpp/internal/mirror"
+	"github.com/ghpp/ghpp/internal/netutil"
 	"github.com/ghpp/ghpp/internal/proxy"
 )
 
@@ -462,6 +466,21 @@ func (a *App) ClearHosts() error {
 	return a.hostsMgr.Clear()
 }
 
+// SetWatchdogAutoRestart 切换看门狗自动重启开关并立即同步标记文件。
+//
+// 配置写入 config.yaml 后，同步把 ${DataDir}/watchdog_enabled 改为 "1"/"0"，
+// 这样看门狗在下次进程异常退出时立即按新值判断，无需重启 Go 进程。
+func (a *App) SetWatchdogAutoRestart(enabled bool) error {
+	if err := a.cfg.Update(func(c *config.Config) error {
+		c.Watchdog.AutoRestart = enabled
+		c.Watchdog.AutoRestartSet = true
+		return nil
+	}); err != nil {
+		return err
+	}
+	return config.SyncWatchdogFlag(a.cfg.DataDir, enabled)
+}
+
 // Status 汇总当前运行状态，供 API 返回给前端。
 type Status struct {
 	Running       bool          `json:"running"`
@@ -477,6 +496,19 @@ type Status struct {
 	HostsWritable bool          `json:"hosts_writable"`
 	Metrics       MetricsStatus `json:"metrics"`
 	Mirrors       MirrorBrief   `json:"mirrors"`
+	// LocalIPs 是本机所有可用于局域网通信的 IPv4，供前端「接入方式」切换 LAN 地址。
+	LocalIPs []string `json:"local_ips"`
+	// ExternalHost 是用户保存的外网接入地址（域名或 IP，可带端口），空表示未配置。
+	ExternalHost string `json:"external_host"`
+	// SystemProxyEnabled 表示是否已开启系统级 HTTP 代理（写 /etc/profile.d/ghpp-proxy.sh）。
+	// 开启后飞牛本机新 login shell 启动的软件默认走加速器，无需软件自身配置。
+	SystemProxyEnabled bool `json:"system_proxy_enabled"`
+	// HostsEnabled 表示 hosts 加速是否已开启（cfg.Hosts.Enabled），
+	// 前端「应用加速」页据此展示状态徽章。
+	HostsEnabled bool `json:"hosts_enabled"`
+	// DockerEnabled 表示 Docker 加速是否已开启（cfg.Docker.Enabled），
+	// 前端「应用加速」页据此展示状态徽章。
+	DockerEnabled bool `json:"docker_enabled"`
 }
 
 // MetricsStatus 是流量与命中指标。
@@ -581,8 +613,103 @@ func (a *App) Status() Status {
 			DockerCount:   m.CategoryDocker.Load(),
 			SavedMB:       float64(m.BytesOut.Load()) / 1024 / 1024,
 		},
-		Mirrors: brief,
+		Mirrors:      brief,
+		LocalIPs:     netutil.LocalIPs(),
+		ExternalHost: a.cfg.External.Host,
+		// 系统代理实际状态以文件是否存在为准（不依赖 config 字段，避免配置与文件不一致时误报）。
+		SystemProxyEnabled: systemProxyFileExists(),
+		HostsEnabled:       a.cfg.Hosts.Enabled,
+		DockerEnabled:      a.cfg.Docker.Enabled,
 	}
+}
+
+// SetExternalHost 保存用户配置的外网接入地址（域名或 IP，可带端口）。
+//
+// 写入 config.yaml 的 external.host 字段，前端「接入方式」切换到「外网」时
+// 会用此地址生成接入示例。空串表示清空，下次切换外网模式前端会引导重新输入。
+func (a *App) SetExternalHost(host string) error {
+	return a.cfg.Update(func(c *config.Config) error {
+		c.External.Host = strings.TrimSpace(host)
+		return nil
+	})
+}
+
+// SetSystemProxy 开启或关闭系统级 HTTP 代理。
+//
+// 开启：往 /etc/profile.d/ghpp-proxy.sh 写入 http_proxy / https_proxy 指向
+// 127.0.0.1:<代理端口>，让飞牛本机所有新 login shell 启动的软件默认走加速器，
+// 无需软件自身支持配置代理。关闭：删除该文件。
+//
+// 同步把状态写入 config.yaml 的 system_proxy.enabled，便于启动期与前端展示。
+// 已运行的进程不受影响，需重启对应软件才生效——UI 必须给出提示。
+func (a *App) SetSystemProxy(enabled bool) error {
+	if err := a.cfg.Update(func(c *config.Config) error {
+		c.SystemProxy.Enabled = enabled
+		c.SystemProxy.EnabledSet = true
+		return nil
+	}); err != nil {
+		return err
+	}
+	return syncSystemProxyFile(enabled, a.cfg.Proxy.Listen)
+}
+
+// systemProxyFilePath 是系统级 HTTP 代理环境变量注入文件的固定路径。
+//
+// 选 /etc/profile.d/ 是因为飞牛基于 Debian，所有 login shell（含 SSH 登录、
+// systemd 服务里 source 了 profile 的）都会自动 source 该目录下 .sh 文件，
+// 不需要改 ~/.bashrc 或单个软件配置。
+const systemProxyFilePath = "/etc/profile.d/ghpp-proxy.sh"
+
+// syncSystemProxyFile 按开关状态创建或删除 /etc/profile.d/ghpp-proxy.sh。
+//
+// 文件内容导出 http_proxy/https_proxy/HTTP_PROXY/HTTPS_PROXY 与 no_proxy，
+// no_proxy 排除本机与私网段，避免 NAS 内部通信也走代理。
+// 写入失败（权限不足或 /etc/profile.d 不存在）时返回错误，由 API 层提示用户。
+func syncSystemProxyFile(enabled bool, proxyListen string) error {
+	if !enabled {
+		// 关闭：删除文件。文件不存在视为成功，避免首次关闭报错。
+		err := os.Remove(systemProxyFilePath)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("删除系统代理文件失败：%w（请确认加速器以 root 运行）", err)
+		}
+		return nil
+	}
+
+	// 端口取自代理服务的实际监听地址；异常时回退 7710。
+	port := "7710"
+	if _, p, err := net.SplitHostPort(proxyListen); err == nil && p != "" {
+		port = p
+	}
+
+	// NAS 本机 shell 走 loopback，地址固定 127.0.0.1。
+	proxyURL := "http://127.0.0.1:" + port
+	// no_proxy 排除本机与私网段，避免 NAS 内部通信（emby/jellyfin 等本地服务）也走代理。
+	noProxy := "localhost,127.0.0.1,::1,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,*.local"
+
+	content := "# GitHub++ 加速器系统代理（自动生成，请勿手动编辑）\n" +
+		"# 开启后所有新 login shell 默认走加速器；仅对 GitHub 相关域名加速，\n" +
+		"# 其他流量透明转发不影响正常联网。关闭请到 GitHub++ 控制台「应用加速」页。\n" +
+		"export http_proxy=" + proxyURL + "\n" +
+		"export https_proxy=" + proxyURL + "\n" +
+		"export HTTP_PROXY=" + proxyURL + "\n" +
+		"export HTTPS_PROXY=" + proxyURL + "\n" +
+		"export no_proxy=" + noProxy + "\n" +
+		"export NO_PROXY=" + noProxy + "\n"
+
+	// 写入临时文件再原子重命名，避免半写入态被 shell 读到。
+	tmp := systemProxyFilePath + ".tmp"
+	if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
+		return fmt.Errorf("写入系统代理文件失败：%w（请确认加速器以 root 运行且 /etc/profile.d 可写）", err)
+	}
+	return os.Rename(tmp, systemProxyFilePath)
+}
+
+// systemProxyFileExists 判断系统级 HTTP 代理是否已开启（文件存在即视为开启）。
+//
+// 用文件存在性而非 config.SystemProxy.Enabled，避免配置与实际文件不一致时误报。
+func systemProxyFileExists() bool {
+	_, err := os.Stat(systemProxyFilePath)
+	return err == nil
 }
 
 // Metrics 返回指标状态，供界面轮询。

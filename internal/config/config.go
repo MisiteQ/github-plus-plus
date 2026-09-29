@@ -150,15 +150,63 @@ type DockerConfig struct {
 	Upstreams []string `yaml:"upstreams" json:"upstreams"`
 }
 
+// WatchdogConfig 控制看门狗（fpk/cmd/main 中的 run_with_watchdog）的自动重启行为。
+//
+// 字段会同步落盘到 ${DataDir}/watchdog_enabled 标记文件（内容 "1" / "0"），
+// 看门狗在子进程异常退出时读取该文件决定是否拉起新进程；这样不依赖 YAML 解析，
+// bash 也能直接判断。UI 切换 auto_restart 时 API 层会同时更新配置文件与标记文件，
+// 保证下次崩溃立即按新值生效。
+type WatchdogConfig struct {
+	// AutoRestart 为 true 时进程异常退出会被看门狗自动拉起；为 false 时看门狗自己也退出。
+	AutoRestart bool `yaml:"auto_restart" json:"auto_restart"`
+
+	// AutoRestartSet 记录用户是否显式设置过 AutoRestart。
+	// 用于区分"用户主动关闭"与"旧版本配置文件字段缺失"，避免旧配置被零值 false 覆盖。
+	AutoRestartSet bool `yaml:"auto_restart_set,omitempty" json:"-"`
+}
+
+// ExternalConfig 保存"外网接入地址"，供控制台「接入方式」区域切换 LAN/WAN 时使用。
+//
+// 飞牛 NAS 通常部署在内网，控制台从内网访问时 location.hostname 是 LAN IP，
+// 但用户在外网设备上配置代理时需要外网域名/IP。让用户手动填一次保存下来，
+// 之后切换「外网模式」即可一键生成外网接入示例，不必每次重新输入。
+//
+// 留空表示未配置，前端会引导用户输入。
+type ExternalConfig struct {
+	// Host 是用户配置的外网接入地址（域名或 IP，可带端口）。
+	// 例：g.example.com、1.2.3.4、g.example.com:7710。
+	Host string `yaml:"host" json:"host"`
+}
+
+// SystemProxyConfig 控制是否在飞牛 NAS 系统层注入 HTTP 代理环境变量。
+//
+// 开启时往 /etc/profile.d/ghpp-proxy.sh 写入 http_proxy / https_proxy 指向
+// 127.0.0.1:<代理端口>，所有新登录 shell 启动的软件默认走加速器；
+// 关闭时删除该文件。已运行的进程不受影响，需重启对应软件才生效。
+//
+// 注意：这会让 NAS 上所有 HTTP 流量都先经过加速器代理，加速器仅对 GitHub
+// 相关域名走镜像加速、其他域名透明转发，所以一般不会拖慢正常联网；
+// 但若加速器进程异常，可能影响新 shell 的网络访问，UI 必须给出风险提示。
+type SystemProxyConfig struct {
+	// Enabled 为 true 时写入 /etc/profile.d/ghpp-proxy.sh；为 false 时删除。
+	Enabled bool `yaml:"enabled" json:"enabled"`
+
+	// EnabledSet 标记用户是否显式设置过 Enabled，用于区分"主动关闭"与"旧配置缺失"。
+	EnabledSet bool `yaml:"enabled_set,omitempty" json:"-"`
+}
+
 // Config 是应用的总配置。
 type Config struct {
-	Mode    Mode         `yaml:"mode" json:"mode"`
-	Proxy   ProxyConfig  `yaml:"proxy" json:"proxy"`
-	Hosts   HostsConfig  `yaml:"hosts" json:"hosts"`
-	Auto    AutoConfig   `yaml:"auto" json:"auto"`
-	Server  ServerConfig `yaml:"server" json:"server"`
-	Docker  DockerConfig `yaml:"docker" json:"docker"`
-	Mirrors []Mirror     `yaml:"mirrors" json:"mirrors"`
+	Mode        Mode              `yaml:"mode" json:"mode"`
+	Proxy       ProxyConfig       `yaml:"proxy" json:"proxy"`
+	Hosts       HostsConfig       `yaml:"hosts" json:"hosts"`
+	Auto        AutoConfig        `yaml:"auto" json:"auto"`
+	Server      ServerConfig      `yaml:"server" json:"server"`
+	Docker      DockerConfig      `yaml:"docker" json:"docker"`
+	Watchdog    WatchdogConfig    `yaml:"watchdog" json:"watchdog"`
+	External    ExternalConfig    `yaml:"external" json:"external"`
+	SystemProxy SystemProxyConfig `yaml:"system_proxy" json:"system_proxy"`
+	Mirrors     []Mirror          `yaml:"mirrors" json:"mirrors"`
 
 	// DataDir 记录配置与运行数据的存放目录，不写入 YAML。
 	DataDir string `yaml:"-" json:"data_dir"`
@@ -206,6 +254,10 @@ func Default() *Config {
 		Docker: DockerConfig{
 			Enabled:   true,
 			Upstreams: BuiltinDockerUpstreams(),
+		},
+		Watchdog: WatchdogConfig{
+			// 默认开启：进程异常退出时看门狗自动拉起，保证加速服务常驻。
+			AutoRestart: true,
 		},
 		Mirrors: BuiltinMirrors(),
 	}
@@ -286,6 +338,14 @@ func Load(dataDir string) (*Config, error) {
 		cfg.Hosts.EnabledSet = true
 	}
 
+	// watchdog.auto_restart 同样需要迁移：旧版本配置文件缺该字段时
+	// YAML 解析得到零值 false，会意外关闭自动重启。通过 AutoRestartSet
+	// 标记识别，未显式设置时采纳新默认值 true。
+	if !cfg.Watchdog.AutoRestartSet {
+		cfg.Watchdog.AutoRestart = Default().Watchdog.AutoRestart
+		cfg.Watchdog.AutoRestartSet = true
+	}
+
 	cfg.normalize()
 
 	// 首次运行落盘默认配置；配置文件里密码为空时也必须回写。
@@ -300,9 +360,32 @@ func Load(dataDir string) (*Config, error) {
 	return cfg, nil
 }
 
+// WatchdogFlagPath 返回看门狗标记文件的路径（位于数据目录下）。
+//
+// 文件内容为 "1" 或 "0"：fpk/cmd/main 的 run_with_watchdog 在子进程异常退出后
+// 读取此文件决定是否拉起新进程。bash 直接 cat 即可，无需 YAML 解析。
+func WatchdogFlagPath(dataDir string) string {
+	return filepath.Join(dataDir, "watchdog_enabled")
+}
+
+// SyncWatchdogFlag 把 cfg.Watchdog.AutoRestart 同步到标记文件。
+//
+// 在 Go 进程启动早期与 API 切换 auto_restart 时调用，保证看门狗每次判断都用最新值。
+func SyncWatchdogFlag(dataDir string, enabled bool) error {
+	flagPath := WatchdogFlagPath(dataDir)
+	val := []byte("0")
+	if enabled {
+		val = []byte("1")
+	}
+	if err := os.MkdirAll(filepath.Dir(flagPath), 0o755); err != nil {
+		return fmt.Errorf("创建数据目录失败: %w", err)
+	}
+	return os.WriteFile(flagPath, val, 0o644)
+}
+
 // detectExplicitFields 检查配置文件中是否有用户显式写入的字段。
 //
-// 目前用于判断 hosts.enabled 是用户主动设置还是旧版本遗留的缺失项。
+// 目前用于判断 hosts.enabled 与 watchdog.auto_restart 是用户主动设置还是旧版本遗留的缺失项。
 // 做法是先把文件内容解析成通用映射，再逐层查键是否存在。
 func detectExplicitFields(data []byte, cfg *Config) error {
 	var raw map[string]any
@@ -313,6 +396,16 @@ func detectExplicitFields(data []byte, cfg *Config) error {
 	if hosts, ok := raw["hosts"].(map[string]any); ok {
 		if _, exists := hosts["enabled"]; exists {
 			cfg.Hosts.EnabledSet = true
+		}
+	}
+	if wd, ok := raw["watchdog"].(map[string]any); ok {
+		if _, exists := wd["auto_restart"]; exists {
+			cfg.Watchdog.AutoRestartSet = true
+		}
+	}
+	if sp, ok := raw["system_proxy"].(map[string]any); ok {
+		if _, exists := sp["enabled"]; exists {
+			cfg.SystemProxy.EnabledSet = true
 		}
 	}
 	return nil

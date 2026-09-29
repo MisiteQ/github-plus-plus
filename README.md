@@ -1,14 +1,14 @@
 # GitHub++ 加速器 github-plus-plus
 
 <p>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.0.4-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.0.6-blue">
   <img alt="fnOS" src="https://img.shields.io/badge/fnOS-x86%20%7C%20arm64-success">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-orange">
 </p>
 
 飞牛 fnOS 上的 GitHub / Docker 加速器（FPK 原生应用）：让闲着的 NAS 当局域网加速跳板，家里所有设备直接用。内置十几个社区公益加速通道，**智能测速自动择优、故障源自动冷却切换**；支持 **Git 克隆 / 网页加速 / Release·raw 下载 / Docker 拉取** 全链路加速。对 API 这类必须直连的域名做了熔断——写客户端前先用 512KB 吞吐探针识别运营商 QoS 限速（"放行响应头、掐响应体"），慢链路自动切镜像，直连恢复后自动切回，全过程无感。Go 单二进制 + 单页前端，**默认不影响 NAS 与局域网其他设备的正常联网**。
 
-- 当前版本：**v1.0.4**
+- 当前版本：**v1.0.6**
 - 作者：**MisiteQ**
 - 适用平台：fnOS **x86 + arm64**（最低系统版本 1.0.0）
 - 默认端口：**7717**（控制台）、**7710**（代理）
@@ -36,11 +36,13 @@ https://github.com/MisiteQ/FnDepot
 
 ### 方式二：手动安装 FPK
 
-1. 到 [Releases](https://github.com/MisiteQ/github-plus-plus/releases) 按 NAS 架构下载：`github-plus-plus_1.0.4_x86.fpk`（x86 机型）或 `github-plus-plus_1.0.4_arm.fpk`（arm64 机型）
+1. 到 [Releases](https://github.com/MisiteQ/github-plus-plus/releases) 按 NAS 架构下载：`github-plus-plus_1.0.6_x86.fpk`（x86 机型）或 `github-plus-plus_1.0.6_arm.fpk`（arm64 机型）
 2. 飞牛 OS → **应用中心** → 左下角 **手动安装** → 选择 fpk 文件
 3. 安装后从桌面打开 **GitHub++**，或直接访问 `http://<NAS_IP>:7717`
 
 > 若「手动安装」入口被关闭，SSH 执行：`appcenter-cli manual-install enable`
+
+> 加速服务默认在后台常驻：关闭桌面窗口、登出飞牛账号都不会中断加速；进程异常退出时由看门狗 3 秒后自动拉起。如需手动启停，用总览页右上角的「启动/停止服务」按钮；如需关闭崩溃自动重启，到「设置 → 后台运行」切换开关。
 
 ## 🚀 使用
 
@@ -100,6 +102,8 @@ config/                 飞牛权限与资源声明（以 root 运行）
 
 | 版本 | 内容 |
 |---|---|
+| v1.0.6 | **接入方式局域网/外网切换**：总览页接入方式区域新增主机地址下拉（跟随当前访问 / 各 LAN IP / 已保存外网地址 / 自定义），可保存外网地址供下次直接复用；Docker 镜像加速地址固定为 127.0.0.1 + 代理端口（NAS 本机 Docker daemon 走 loopback） |
+| v1.0.5 | **后台常驻修复**：用 setsid 让加速服务脱离会话，关闭桌面窗口与登出飞牛账号不再导致服务退出；新增进程崩溃自动重启（看门狗 3 秒拉起，rc=0 视为主动停止不再拉起）；总览页新增「启动/停止服务」开关按钮，设置页新增「崩溃自动重启」开关 |
 | v1.0.4 | **界面适配修复**：侧边栏折叠按钮改为边缘悬浮手柄不再遮挡 Logo；请求分布环形图修正为正圆、圆心数字与标签不再重叠；窄屏下侧边栏自动折叠为图标轨、内容单列；加速源表格列宽优化；静态资源改为 no-cache，升级后界面立即生效 |
 | v1.0.3 | **控制台视觉升级**：使用真实应用图标、侧边栏支持折叠、新增 8 套主题切换；静态资源 no-cache 防缓存 |
 | v1.0.2 | **直连链路加固**：写客户端前的 512KB 吞吐探针识别 QoS 限速、直连快速熔断与半开恢复、启动预热避免重启后首批请求踩慢直连、端到端吞吐兜底熔断，慢链路自动走镜像通道；控制台默认密码改为 admin123 并修复密码未持久化导致重启后无法登录的问题 |

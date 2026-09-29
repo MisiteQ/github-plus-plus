@@ -53,6 +53,14 @@ func main() {
 		return
 	}
 
+	// 启动早期写自身 PID 到 GHPH_PID_FILE 指定路径，供 fpk/cmd/main 的
+	// stop/status 管理。这是 setsid 启动方式下唯一可靠的取 PID 方式
+	// （setsid 后 $! 拿到的是 setsid 而非真实服务进程）。
+	// 仅在主服务模式下写入；reset-password / clear-hosts 等子命令不写。
+	if v := os.Getenv("GHPH_PID_FILE"); v != "" && !*resetPass && !*clearHost {
+		_ = os.WriteFile(v, []byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
+	}
+
 	// 解析数据目录。
 	dir := config.ResolveDataDir(*dataDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -73,6 +81,14 @@ func main() {
 	if err != nil {
 		log.Logf("error", "加载配置失败: %v", err)
 		os.Exit(1)
+	}
+
+	// 同步看门狗自动重启开关到标记文件，供 fpk/cmd/main 的 run_with_watchdog 读取。
+	// 跳过 reset-password / clear-hosts 等子命令，避免无谓写盘。
+	if !*resetPass && !*clearHost {
+		if err := config.SyncWatchdogFlag(dir, cfg.Watchdog.AutoRestart); err != nil {
+			log.Logf("warn", "写看门狗标记文件失败: %v", err)
+		}
 	}
 
 	// 命令行参数覆盖配置。
@@ -142,8 +158,21 @@ func main() {
 	}
 
 	// 等待退出信号。
+	// - SIGINT/SIGTERM：优雅退出，状态码 0，让看门狗识别为"主动退出"不再拉起。
+	// - SIGHUP：忽略（setsid 已让进程脱离会话，这里再保险一次），
+	//   避免极端场景下终端断开误退出。看门狗在收到 SIGTERM 后会让 rc=0 退出。
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	// SIGHUP 走单独 channel，收到后仅记日志、不退出。
+	hupCh := make(chan os.Signal, 1)
+	signal.Notify(hupCh, syscall.SIGHUP)
+	go func() {
+		for range hupCh {
+			log.Logf("warn", "收到 SIGHUP（终端断开），已忽略并继续运行")
+		}
+	}()
+
 	sig := <-sigCh
 	log.Logf("info", "收到信号 %s，开始优雅退出…", sig)
 
@@ -159,6 +188,9 @@ func main() {
 
 	// 给日志刷盘留一点时间。
 	time.Sleep(200 * time.Millisecond)
+
+	// 显式返回 0，让看门狗识别为"主动退出"不再拉起；进程崩溃时 rc 非 0 才会重启。
+	os.Exit(0)
 }
 
 // printBanner 输出启动信息，包含用户最需要的访问地址与初始密码。

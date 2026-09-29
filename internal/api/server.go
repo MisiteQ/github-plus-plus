@@ -56,9 +56,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/logs/stream", s.guard(s.handleLogStream))
 	mux.HandleFunc("/api/password", s.guard(s.handlePassword))
 	mux.HandleFunc("/api/service", s.guard(s.handleService))
+	mux.HandleFunc("/api/watchdog", s.guard(s.handleWatchdog))
 	mux.HandleFunc("/api/cert", s.guard(s.handleCert))
 	mux.HandleFunc("/api/cert/", s.guard(s.handleCert))
 	mux.HandleFunc("/api/docker", s.guard(s.handleDocker))
+	mux.HandleFunc("/api/network", s.guard(s.handleNetwork))
+	mux.HandleFunc("/api/sysproxy", s.guard(s.handleSysProxy))
 	mux.HandleFunc("/api/about", s.guard(s.handleAbout))
 
 	// ---- 静态资源：未匹配的路径交给前端 ----
@@ -209,6 +212,8 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			c.Hosts.RefreshMinutes = incoming.Hosts.RefreshMinutes
 			c.Hosts.CandidateLimit = incoming.Hosts.CandidateLimit
 			c.Hosts.ProbeTimeoutMS = incoming.Hosts.ProbeTimeoutMS
+			// watchdog 字段单独走 /api/watchdog 切换（需同步标记文件），
+			// 这里不接收，避免热更新配置时把标记文件搞成与 YAML 不一致。
 			return nil
 		})
 		if err != nil {
@@ -705,6 +710,37 @@ func (s *Server) handleService(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		writeError(w, http.StatusBadRequest, "未知操作: %s", req.Action)
+	}
+}
+
+// handleWatchdog 切换看门狗自动重启开关。
+//
+// GET  返回当前 auto_restart 状态。
+// PUT  body: {"auto_restart": bool}，立即更新 config.yaml 与 watchdog_enabled 标记文件。
+func (s *Server) handleWatchdog(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeOK(w, map[string]bool{
+			"auto_restart": s.app.CurrentConfig().Watchdog.AutoRestart,
+		})
+
+	case http.MethodPut:
+		var req struct {
+			AutoRestart bool `json:"auto_restart"`
+		}
+		if err := decodeBody(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "%v", err)
+			return
+		}
+		if err := s.app.SetWatchdogAutoRestart(req.AutoRestart); err != nil {
+			writeError(w, http.StatusInternalServerError, "切换自动重启失败: %v", err)
+			return
+		}
+		s.logf("info", "看门狗自动重启已切换为 %v", req.AutoRestart)
+		writeOK(w, map[string]bool{"auto_restart": req.AutoRestart})
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "不支持的方法")
 	}
 }
 

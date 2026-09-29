@@ -1,11 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GitHub++ 加速器</title>
-<link rel="icon" type="image/png" href="/favicon.png?v=1.0.4">
-<link rel="stylesheet" href="/style.css?v=1.0.4">
+<link rel="icon" type="image/png" href="/favicon.png?v=1.0.6">
+<link rel="stylesheet" href="/style.css?v=1.0.6">
 <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'indigo')}catch(e){}</script>
 </head>
 <body>
@@ -14,7 +14,7 @@
   <div class="login-bg"></div>
   <form class="login-card" id="login-form">
     <div class="login-head">
-      <div class="logo-big"><img src="/logo.png?v=1.0.4" alt="GitHub++"></div>
+      <div class="logo-big"><img src="/logo.png?v=1.0.6" alt="GitHub++"></div>
       <h1>GitHub++</h1>
       <p>飞牛 NAS GitHub 加速器</p>
     </div>
@@ -38,7 +38,7 @@
       <span class="toggle-chevron">⟨</span>
     </button>
     <div class="brand">
-      <div class="logo"><img src="/logo.png?v=1.0.4" alt="GitHub++"></div>
+      <div class="logo"><img src="/logo.png?v=1.0.6" alt="GitHub++"></div>
       <div class="brand-text">
         <strong>GitHub++</strong>
         <small>加速器控制台</small>
@@ -50,6 +50,7 @@
       <button class="tab" data-tab="mirrors" role="tab"><i class="nav-icon">⚡</i><span>加速源</span></button>
       <button class="tab" data-tab="hosts" role="tab"><i class="nav-icon">◎</i><span>DNS 优选</span></button>
       <button class="tab" data-tab="docker" role="tab"><i class="nav-icon">⬢</i><span>Docker 加速</span></button>
+      <button class="tab" data-tab="apps" role="tab"><i class="nav-icon">⊞</i><span>应用加速</span></button>
       <button class="tab" data-tab="logs" role="tab"><i class="nav-icon">☰</i><span>日志</span></button>
       <button class="tab" data-tab="settings" role="tab"><i class="nav-icon">⚙</i><span>设置</span></button>
       <button class="tab" data-tab="about" role="tab"><i class="nav-icon">ⓘ</i><span>关于</span></button>
@@ -87,6 +88,7 @@
           <p class="muted">服务运行状态与接入指引</p>
         </div>
         <div class="head-actions">
+          <button class="btn" id="btn-service-toggle" title="启动或停止加速服务">停止服务</button>
           <button class="btn" id="btn-restart">重启代理</button>
           <button class="btn btn-primary" id="btn-refresh">立即测速并优化</button>
         </div>
@@ -136,6 +138,12 @@
         <div class="card-head">
           <h2>接入方式</h2>
           <span class="muted">把下面的地址配置到客户端即可加速</span>
+          <div class="access-mode-bar" id="access-mode-bar">
+            <select id="access-host-select" class="access-host-select" title="切换生成接入示例所用的主机地址"></select>
+            <input type="text" id="access-host-input" class="access-host-input" placeholder="自定义地址（域名或 IP，可带端口）" />
+            <button class="btn btn-sm" id="btn-access-apply">应用</button>
+            <button class="btn btn-sm btn-primary" id="btn-access-save-external">保存为外网地址</button>
+          </div>
         </div>
         <div class="connect-list" id="connect-list"></div>
       </div>
@@ -239,6 +247,7 @@
         <div class="card-head">
           <h2>Docker 拉取加速</h2>
           <div class="head-actions">
+            <span class="docker-applied-badge" id="docker-applied-badge">未应用</span>
             <label class="switch">
               <input type="checkbox" id="docker-toggle">
               <span>启用 Docker 加速</span>
@@ -247,21 +256,28 @@
           </div>
         </div>
         <p class="muted" style="margin-top:0">
-          把下面的加速地址填入 Docker 的镜像源配置后，<code>docker pull</code> 会自动经由本加速器，
-          上游按顺序尝试、失效自动切换，无需依赖任何第三方固定节点。
+          点「一键应用到系统」自动写入 Docker 配置并重启 Docker，<code>docker pull</code> 即自动走加速器，
+          无需 SSH、无需去飞牛 Docker 界面手动填镜像源。
         </p>
+        <div class="notice warn" id="docker-apply-hint">
+          <strong>一键应用到系统</strong>会修改 <code>/etc/docker/daemon.json</code> 并重启 Docker 服务，
+          <strong>所有运行中的容器会短暂中断几秒</strong>。其他 Docker 配置字段会保留。
+        </div>
+        <button class="btn btn-primary" id="btn-docker-apply" style="margin:8px 0 12px">
+          一键应用到系统（写入 daemon.json 并重启 Docker）
+        </button>
         <label class="field">
-          <span>加速地址（飞牛 Docker 界面的「镜像源」直接填这个）</span>
+          <span>加速地址（系统已写入此地址，一般无需复制）</span>
           <div class="copy-row">
             <input type="text" id="docker-mirror-url" readonly>
             <button class="btn btn-sm" data-copy-target="docker-mirror-url">复制</button>
           </div>
         </label>
         <label class="field">
-          <span>/etc/docker/daemon.json 参考配置（SSH 场景）</span>
+          <span>daemon.json 参考内容（已自动写入，仅供查看）</span>
           <textarea id="docker-daemon-json" rows="4" readonly class="code-area"></textarea>
           <div class="copy-row"><button class="btn btn-sm" data-copy-target="docker-daemon-json">复制</button></div>
-          <small>修改后执行 sudo systemctl restart docker 生效；飞牛用户推荐直接在 Docker 界面填写镜像源</small>
+          <small>本软件已自动写入此配置，无需手动编辑</small>
         </label>
         <label class="field">
           <span>上游列表（每行一个，按优先级排序，official 表示 Docker 官方源兜底）</span>
@@ -282,10 +298,10 @@
         </div>
         <div class="notice">
           hosts 模式开启时，飞牛系统自身的 GitHub 访问（应用商店、系统更新检查等）已自动加速，无需额外配置。
-          以下片段用于让 NAS 上的命令行工具也走加速通道。
+          下方片段仅供高级用户参考，普通用户开启 hosts 加速即可。
         </div>
         <label class="field">
-          <span>Git 仅对 GitHub 走加速（NAS 本机执行一次即可）</span>
+          <span>Git 全局代理（在 NAS 本机 shell 执行一次即可，或开启系统代理自动注入）</span>
           <textarea id="snippet-git" rows="2" readonly class="code-area"></textarea>
           <div class="copy-row"><button class="btn btn-sm" data-copy-target="snippet-git">复制</button></div>
         </label>
@@ -300,6 +316,135 @@
           <div class="copy-row"><button class="btn btn-sm" data-copy-target="snippet-proxy">复制</button></div>
           <small>代理仅加速 GitHub 相关域名，其他网站流量直连不受影响</small>
         </label>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-apps">
+      <div class="page-head">
+        <div>
+          <h1>应用加速</h1>
+          <p class="muted">让飞牛 NAS 上所有软件（含你装的第三方应用）无需配置即可被动走加速</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>当前加速状态</h2>
+          <span class="muted">三种被动加速方式的实时开关情况</span>
+        </div>
+        <div class="apps-status-grid">
+          <div class="apps-status-item">
+            <div class="apps-status-label">hosts 加速</div>
+            <div class="apps-status-value" id="apps-hosts-status">—</div>
+            <div class="apps-status-desc">GitHub 域名解析到 NAS 本机，对系统 DNS 软件全局生效</div>
+          </div>
+          <div class="apps-status-item">
+            <div class="apps-status-label">Docker 加速</div>
+            <div class="apps-status-value" id="apps-docker-status">—</div>
+            <div class="apps-status-desc">docker pull 自动走加速通道</div>
+          </div>
+          <div class="apps-status-item">
+            <div class="apps-status-label">系统代理</div>
+            <div class="apps-status-value" id="apps-sysproxy-status">—</div>
+            <div class="apps-status-desc">新 shell 软件默认走 http_proxy</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>系统级 HTTP 代理</h2>
+          <label class="switch">
+            <input type="checkbox" id="sysproxy-toggle">
+            <span>开启系统代理</span>
+          </label>
+        </div>
+        <div class="notice warn">
+          开启后会在 <code>/etc/profile.d/ghpp-proxy.sh</code> 写入 <code>http_proxy</code> / <code>https_proxy</code>
+          指向 <code>127.0.0.1:7710</code>，所有<strong>新登录 shell</strong> 启动的软件默认走加速器。
+          加速器仅对 GitHub 相关域名走镜像加速、其他流量透明转发，一般不影响正常联网；
+          但若加速器进程异常，可能影响新 shell 的网络访问。
+          <strong>已运行的进程不受影响，需重启对应软件才生效。</strong>
+        </div>
+        <p class="muted" style="margin-top:8px">
+          适用于 apt / yum / wget / curl / git / pip / npm / go modules 等读 http_proxy 环境变量的工具，
+          以及飞牛本机所有通过 shell 启动的命令行软件。
+          <strong>Docker 容器</strong>需在飞牛 Docker 界面重启容器让其继承（见下方场景说明）。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>三种被动加速方式</h2>
+          <span class="muted">按场景选用，可叠加</span>
+        </div>
+        <div class="apps-method-list">
+          <div class="apps-method-item">
+            <div class="ci-icon">◎</div>
+            <div class="ci-body">
+              <strong>hosts 加速（推荐，对飞牛本机 GitHub 访问全局生效）</strong>
+              <p class="muted">开启后 NAS 本机 /etc/hosts 把 github.com 等域名解析到 NAS 本机，
+              飞牛系统应用、命令行工具、任何走系统 DNS 的软件访问 GitHub 都自动加速，无需软件配置。</p>
+            </div>
+            <button class="btn btn-sm" id="btn-apps-go-hosts">去 DNS 优选页</button>
+          </div>
+          <div class="apps-method-item">
+            <div class="ci-icon">⬢</div>
+            <div class="ci-body">
+              <strong>Docker 加速（对 docker pull 全局生效）</strong>
+              <p class="muted">点下方按钮自动写入 Docker 配置并重启 Docker，所有 docker pull / docker compose pull
+              自动走加速。飞牛应用中心装的 docker 应用拉镜像也会走加速。</p>
+            </div>
+            <button class="btn btn-sm btn-primary" id="btn-apps-docker-apply">一键应用 Docker 配置</button>
+          </div>
+          <div class="apps-method-item">
+            <div class="ci-icon">⊞</div>
+            <div class="ci-body">
+              <strong>系统级 HTTP 代理（对读环境变量的软件生效）</strong>
+              <p class="muted">见上方开关。apt / yum / wget / curl / git / pip / npm / go modules 等工具会
+              自动读取 http_proxy 环境变量走加速，无需单独配置。</p>
+            </div>
+            <button class="btn btn-sm" id="btn-apps-scroll-sysproxy">回到上方开关</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>我的软件该用哪种方式？</h2>
+          <span class="muted">按访问方式对号入座，不限软件</span>
+        </div>
+        <div class="notice">
+          下表按<strong>软件访问 GitHub 的方式</strong>分类，不限于具体软件名字——
+          无论你装的是 emby / jellyfin / homeassistant / halo / 青龙 / n8n / alist 还是任何其他应用，
+          只要它的网络访问属于下列方式之一，就已被对应开关覆盖。
+        </div>
+        <div class="apps-scenario-list">
+          <div class="apps-scenario">
+            <strong>方式一：软件走系统 DNS 访问 GitHub</strong>
+            <p class="muted">绝大多数桌面应用、飞牛系统服务、带 Web 界面拉插件/字幕/资源的软件（如 emby/jellyfin 插件、各种 NAS 应用的更新检查）。
+            开启 <strong>hosts 加速</strong>即可，github.com 等域名被解析到 NAS 本机自动走加速，无需改软件配置。</p>
+          </div>
+          <div class="apps-scenario">
+            <strong>方式二：软件用 docker pull 拉镜像</strong>
+            <p class="muted">所有 docker pull / docker compose pull，包括飞牛应用中心装的 docker 应用拉镜像、青龙/青龙面板更新、任何 compose 堆栈拉镜像。
+            点上方 <strong>一键应用 Docker 配置</strong> 即可，registry-mirrors 自动写入 daemon.json。</p>
+          </div>
+          <div class="apps-scenario">
+            <strong>方式三：软件读 http_proxy 环境变量</strong>
+            <p class="muted">命令行工具与包管理器：apt / yum / wget / curl / git / pip / npm / go install / cargo 等。
+            开启 <strong>系统级 HTTP 代理</strong>即可，新 shell 启动的软件自动读取 http_proxy 走加速。</p>
+          </div>
+          <div class="apps-scenario">
+            <strong>方式四：软件是 Docker 容器且访问 GitHub（非 pull 镜像）</strong>
+            <p class="muted">容器内软件不走宿主 hosts 也不读宿主 profile.d，如 homeassistant HACS 商店、容器内 git clone GitHub 仓库等。
+            开启系统代理后，在<strong>飞牛 Docker 界面</strong>把容器重启一次让其继承 http_proxy（需容器内软件支持读 http_proxy）。</p>
+          </div>
+        </div>
+        <div class="notice ok" style="margin-top:10px">
+          <strong>不确定属于哪种？三个开关全开最稳。</strong>hosts 加速 + Docker 加速 + 系统代理同时开启，
+          覆盖所有四种访问方式，互不冲突，任何第三方软件访问 GitHub 都会被动走加速。
+        </div>
       </div>
     </section>
 
@@ -399,6 +544,21 @@
             <button type="submit" class="btn btn-primary">修改密码</button>
           </form>
         </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>后台运行</h2>
+          <span class="muted">关闭软件与登出飞牛账号后保持服务运行</span>
+        </div>
+        <label class="switch" style="display:flex;align-items:center;gap:.5rem">
+          <input type="checkbox" id="watchdog-toggle">
+          <span>崩溃自动重启</span>
+        </label>
+        <p class="muted" style="margin-top:.5rem;margin-bottom:0">
+          开启后，加速服务进程异常退出时由看门狗 3 秒后自动拉起，配合 setsid 脱离会话让关闭桌面窗口与登出飞牛账号都不再中断加速；
+          关闭后，进程崩溃时看门狗自己也会退出，需要手动启动服务才会恢复。
+        </p>
       </div>
 
       <div class="card">
@@ -520,6 +680,6 @@
 
 <div class="toast-wrap" id="toast-wrap"></div>
 
-<script src="/app.js?v=1.0.4"></script>
+<script src="/app.js?v=1.0.6"></script>
 </body>
 </html>

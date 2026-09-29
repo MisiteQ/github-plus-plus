@@ -145,7 +145,7 @@ a:hover{text-decoration:underline}
   min-height:72px;
   flex-shrink:0;
 }
-.sidebar.collapsed .brand{justify-content:center;padding:18px 0}
+.sidebar.collapsed .brand{justify-content:center;padding:18px 0;gap:0}
 
 .logo{
   width:40px;height:40px;
@@ -402,6 +402,10 @@ a:hover{text-decoration:underline}
 .btn-danger{color:var(--red);border-color:var(--border)}
 .btn-danger:hover:not(:disabled){background:var(--red-soft);border-color:#fecaca;color:var(--red)}
 
+/* .btn-danger-solid 用于总览页"停止服务"按钮：红底白字，与 .btn-primary 蓝底白字对称。 */
+.btn-danger-solid{background:var(--red);border-color:var(--red);color:#fff}
+.btn-danger-solid:hover:not(:disabled){background:var(--red-strong,#dc2626);border-color:var(--red-strong,#dc2626);filter:brightness(.95)}
+
 .btn-ghost{border-color:transparent;background:transparent;color:var(--text-dim)}
 .btn-ghost:hover:not(:disabled){background:var(--surface-hover);color:var(--text);border-color:transparent}
 
@@ -590,10 +594,71 @@ input:focus,select:focus,textarea:focus{
   line-height:1.6;
 }
 .notice.warn{background:var(--amber-soft);color:var(--amber)}
+.notice.ok{background:var(--green-soft);color:var(--green)}
 .notice.err{background:var(--red-soft);color:var(--red)}
 
 /* ---------- 接入方式 ---------- */
 .connect-list{display:grid;gap:10px}
+
+/* 接入方式区域的 LAN/WAN 切换条 */
+.access-mode-bar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin-top:6px;width:100%;
+}
+.access-host-select{
+  height:30px;padding:0 10px;border:1px solid var(--border);
+  border-radius:var(--radius);background:var(--bg-card);color:var(--text);
+  font-size:13px;cursor:pointer;max-width:220px;
+}
+.access-host-select:focus{outline:none;border-color:var(--accent)}
+.access-host-input{
+  height:30px;padding:0 10px;border:1px solid var(--border);
+  border-radius:var(--radius);background:var(--bg-card);color:var(--text);
+  font-size:13px;flex:1;min-width:180px;
+}
+.access-host-input:focus{outline:none;border-color:var(--accent)}
+.access-host-input::placeholder{color:var(--muted)}
+
+/* Docker 加速页的"已应用/未应用"徽章 */
+.docker-applied-badge{
+  display:inline-block;padding:3px 10px;border-radius:12px;
+  font-size:12px;font-weight:600;line-height:1.4;
+}
+.docker-applied-badge.on{background:var(--green-soft,var(--green));color:var(--green)}
+.docker-applied-badge.off{background:var(--amber-soft);color:var(--amber)}
+
+/* ---------- 应用加速页 ---------- */
+.apps-status-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;
+}
+.apps-status-item{
+  padding:14px 16px;
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius);
+  background:var(--bg-card);
+}
+.apps-status-label{font-size:12px;color:var(--text-dim);margin-bottom:6px}
+.apps-status-value{font-size:16px;font-weight:700;margin-bottom:4px}
+.apps-status-value.on{color:var(--green)}
+.apps-status-value.off{color:var(--text-faint)}
+.apps-status-desc{font-size:11.5px;color:var(--muted);line-height:1.4}
+.apps-method-list,.apps-scenario-list{display:grid;gap:10px}
+.apps-method-item{
+  display:flex;align-items:center;gap:14px;
+  padding:13px 15px;border:1px solid var(--border-soft);
+  border-radius:var(--radius);background:var(--bg-card);
+}
+.apps-method-item .ci-body{flex:1;min-width:0}
+.apps-method-item .ci-body strong{display:block;margin-bottom:4px}
+.apps-method-item .ci-body p{margin:0;font-size:12.5px;line-height:1.5}
+.apps-scenario{
+  padding:13px 15px;border:1px solid var(--border-soft);
+  border-radius:var(--radius);background:var(--bg-card);
+}
+.apps-scenario strong{display:block;margin-bottom:4px}
+.apps-scenario p{margin:0;font-size:12.5px;line-height:1.5}
 
 .connect-item{
   display:flex;
@@ -745,7 +810,7 @@ input:focus,select:focus,textarea:focus{
 @media (max-width:600px){
   /* 手机端强制图标轨，折叠手柄隐藏 */
   .sidebar{width:68px !important}
-  .brand{justify-content:center;padding:18px 0}
+  .brand{justify-content:center;padding:18px 0;gap:0}
   .brand-text,.tab span,.run-label,.btn-logout span{display:none !important}
   .tab{justify-content:center;padding:10px 0}
   .theme-picker{display:none !important}

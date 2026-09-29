@@ -16,6 +16,13 @@ const state = {
   logSource: null,
   logAutoScroll: true,
   timers: [],
+  // 接入方式区域当前选中的主机地址（用于生成 HTTP 代理 / Git / hosts / 前缀下载示例）。
+  // Docker 项固定用 127.0.0.1 不跟随此值。空串表示尚未初始化，renderStatus 会填默认值。
+  accessHost: '',
+  // 本机所有局域网 IPv4，由 /api/status 返回，用于填充下拉选项。
+  localIPs: [],
+  // 用户保存的外网接入地址，由 /api/status 返回。
+  externalHost: '',
 };
 
 /* ---------- 请求封装 ---------- */
@@ -192,6 +199,14 @@ function renderStatus() {
   dot.className = 'dot ' + (s.running ? 'on' : 'off');
   $('run-label').textContent = s.running ? '运行中' : '已停止';
 
+  // 总览页启停开关按钮：运行中显示「停止服务」（红底白字），停止时显示「启动服务」（蓝底白字）。
+  const toggleBtn = $('btn-service-toggle');
+  if (toggleBtn) {
+    toggleBtn.textContent = s.running ? '停止服务' : '启动服务';
+    toggleBtn.classList.toggle('btn-primary', !s.running);
+    toggleBtn.classList.toggle('btn-danger-solid', s.running);
+  }
+
   const hitRate = m.total_requests > 0
     ? Math.round(m.accelerated / m.total_requests * 100)
     : 0;
@@ -228,6 +243,14 @@ function renderStatus() {
   }
 
   renderCategoryChart(m);
+
+  // 同步接入方式切换栏所需的网络信息：本机 LAN IP 列表 + 已保存外网地址。
+  // 首次加载时 accessHost 为空，用当前访问 hostname 作默认值（保持旧行为）。
+  state.localIPs = Array.isArray(s.local_ips) ? s.local_ips : [];
+  state.externalHost = s.external_host || '';
+  if (!state.accessHost) state.accessHost = location.hostname || '127.0.0.1';
+  renderAccessHostSelect();
+
   renderConnectList(s);
 }
 
@@ -337,7 +360,12 @@ function scheduleChartRedraw() {
 
 function renderConnectList(s) {
   const proxyPort = (s.proxy_addr || '').split(':').pop() || '7710';
-  const host = location.hostname || '127.0.0.1';
+  // 主机地址取切换栏当前选中值；未初始化时回退到当前访问控制台用的 hostname。
+  const host = state.accessHost || location.hostname || '127.0.0.1';
+
+  // Docker daemon 跑在 NAS 本机，固定用 127.0.0.1 + 代理端口，不跟随切换的 host：
+  // 即便用户切到外网地址配置其他客户端，Docker mirror 仍走本机 loopback 最稳。
+  const dockerHost = '127.0.0.1';
 
   const items = [
     {
@@ -360,9 +388,9 @@ function renderConnectList(s) {
     },
     {
       tag: 'DOCKER',
-      title: 'Docker 镜像加速（registry-mirrors）',
-      code: 'http://' + host + ':' + proxyPort,
-      desc: '配置为 Docker 的镜像源地址，docker pull 自动加速',
+      title: 'Docker 镜像加速（registry-mirrors，本机）',
+      code: 'http://' + dockerHost + ':' + proxyPort,
+      desc: 'Docker daemon 在 NAS 本机，固定用 127.0.0.1 + 代理端口',
     },
     {
       tag: 'URL',
@@ -382,6 +410,97 @@ function renderConnectList(s) {
     '<button class="btn btn-sm" data-copy="' + esc(it.code) + '">复制</button>' +
     '</div>'
   )).join('');
+}
+
+// renderAccessHostSelect 填充「接入方式」区域的主机地址下拉。
+//
+// 选项顺序：
+//   1. 跟随当前访问（location.hostname）——默认选中，用户从内网访问就是内网地址，外网访问就是外网地址。
+//   2. 各本机 LAN IP——飞牛多网卡时可切换不同网卡地址。
+//   3. 已保存的外网地址——若 state.externalHost 非空。
+//   4. 自定义……——选中后焦点跳到输入框，用户可填任意地址。
+//
+// 同时把输入框值同步为当前 accessHost（若不在下拉选项里则保留原值）。
+function renderAccessHostSelect() {
+  const sel = $('access-host-select');
+  if (!sel) return;
+
+  const cur = location.hostname || '127.0.0.1';
+  const opts = [];
+  opts.push({value: cur, label: '跟随当前访问（' + cur + '）'});
+  (state.localIPs || []).forEach((ip) => {
+    if (ip !== cur) opts.push({value: ip, label: '局域网 ' + ip});
+  });
+  if (state.externalHost) {
+    opts.push({value: state.externalHost, label: '外网 ' + state.externalHost});
+  }
+  opts.push({value: '__custom__', label: '自定义……'});
+
+  // 当前选中值若在下拉里就保留，否则回退到"跟随当前访问"。
+  let selected = state.accessHost || cur;
+  if (!opts.some((o) => o.value === selected)) selected = cur;
+
+  sel.innerHTML = opts.map((o) =>
+    '<option value="' + esc(o.value) + '"' + (o.value === selected ? ' selected' : '') + '>' +
+    esc(o.label) + '</option>'
+  ).join('');
+
+  // 输入框：若当前是自定义地址则显示该值，否则清空（避免误导）。
+  const inp = $('access-host-input');
+  if (inp) {
+    const isCustom = selected === '__custom__' ||
+      !opts.some((o) => o.value === selected && o.value !== '__custom__');
+    inp.value = (isCustom && state.accessHost) ? state.accessHost : '';
+  }
+}
+
+// applyAccessHost 把下拉/输入框的当前值应用到接入方式列表并立即重渲染。
+//
+// 优先级：输入框非空 → 用输入框值；否则用下拉值；下拉选"自定义"且输入框空 → 提示输入。
+function applyAccessHost() {
+  const sel = $('access-host-select');
+  const inp = $('access-host-input');
+  if (!sel) return;
+
+  const customVal = (inp && inp.value || '').trim();
+  const selVal = sel.value;
+
+  if (selVal === '__custom__') {
+    if (!customVal) {
+      if (inp) inp.focus();
+      toast('请在右侧输入框填写自定义地址');
+      return;
+    }
+    state.accessHost = customVal;
+  } else {
+    state.accessHost = selVal;
+    if (inp) inp.value = '';
+  }
+
+  if (state.status) renderConnectList(state.status.status);
+}
+
+// saveExternalHost 把当前输入框/下拉选中的地址保存为外网地址，持久化到后端 config.yaml。
+async function saveExternalHost() {
+  const sel = $('access-host-select');
+  const inp = $('access-host-input');
+  let host = (inp && inp.value || '').trim();
+  if (!host && sel && sel.value && sel.value !== '__custom__') host = sel.value.trim();
+  if (!host) {
+    toast('请先填写或选择一个地址再保存');
+    return;
+  }
+
+  try {
+    const res = await api('/api/network', {method: 'PUT', body: {host: host}});
+    state.externalHost = (res && res.external_host) || host;
+    state.accessHost = host;
+    renderAccessHostSelect();
+    if (state.status) renderConnectList(state.status.status);
+    toast('已保存为外网地址');
+  } catch (e) {
+    toast('保存失败：' + (e && e.message || e));
+  }
 }
 
 /* ---------- 加速源 ---------- */
@@ -658,6 +777,10 @@ function renderSettings() {
   $('set-cooldown').value = cfg.proxy.cooldown_seconds || 300;
   $('set-probe-interval').value = cfg.auto.probe_interval_minutes || 30;
   $('set-direct-ratio').value = cfg.auto.direct_better_ratio || 1.5;
+
+  // 同步看门狗自动重启开关（设置页）。
+  const wdToggle = $('watchdog-toggle');
+  if (wdToggle) wdToggle.checked = !!(cfg.watchdog && cfg.watchdog.auto_restart);
 }
 
 /* ---------- Docker 加速 ---------- */
@@ -676,6 +799,18 @@ function renderDocker() {
   $('docker-daemon-json').value = d.daemon_json || '';
   $('docker-upstreams').value = (d.upstreams || []).join('\n');
 
+  // applied 徽章：反映 daemon.json 是否已含本代理地址。
+  const badge = $('docker-applied-badge');
+  if (badge) {
+    if (d.applied) {
+      badge.textContent = '已应用到系统';
+      badge.className = 'docker-applied-badge on';
+    } else {
+      badge.textContent = '未应用';
+      badge.className = 'docker-applied-badge off';
+    }
+  }
+
   $('docker-registries').innerHTML = (d.supported_registries || []).map((r) => (
     '<tr><td><span class="mono">' + esc(r.registry) + '</span></td>' +
     '<td>' + esc(r.note) + '</td></tr>'
@@ -692,6 +827,30 @@ function renderDocker() {
     'wget ' + base + '/https://github.com/用户/仓库/releases/download/v1.0/文件.zip';
   $('snippet-proxy').value =
     'export http_proxy=' + base + '   # 仅加速 GitHub，其他域名直连';
+}
+
+// applyDocker 一键写入 daemon.json 并重启 Docker，让小白用户无需 SSH。
+// 强确认：会重启 Docker 服务，所有容器短暂中断。
+async function applyDocker() {
+  if (!confirm('确定一键应用到系统？\n\n' +
+      '本操作会：\n' +
+      '1. 把本机代理地址写入 /etc/docker/daemon.json（保留其他配置）\n' +
+      '2. 重启 Docker 服务让配置生效\n\n' +
+      '⚠️ 所有运行中的容器会短暂中断几秒，请确保没有正在执行的关键任务。')) return;
+
+  const btn = $('btn-docker-apply') || $('btn-apps-docker-apply');
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '应用中…'; }
+  try {
+    const res = await api('/api/docker/apply', {method: 'POST'});
+    toast((res && res.message) || '已应用并重启 Docker', 'ok');
+    // 重新加载 docker 状态（applied 徽章会刷新）。
+    await loadDocker();
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
 }
 
 async function saveDocker() {
@@ -793,6 +952,48 @@ async function loadDNS() {
   renderHosts(await api('/api/hosts'));
 }
 
+// loadApps 加载「应用加速」页：hosts 加速状态、Docker 加速状态、系统代理状态。
+// 复用 /api/status（已含 hosts/docker/system_proxy 字段）+ /api/sysproxy 兜底。
+async function loadApps() {
+  // 拿最新 status：若刚加载过就复用，否则现拉。
+  if (!state.status) {
+    state.status = await api('/api/status');
+  }
+  renderApps();
+}
+
+// renderApps 填充「应用加速」页的状态徽章与系统代理开关。
+function renderApps() {
+  const s = state.status && state.status.status;
+  if (!s) return;
+
+  // hosts 加速状态：来自 status.hosts_enabled（hosts 加速开关）。
+  const hostsOn = !!(s.hosts_enabled);
+  const hostsEl = $('apps-hosts-status');
+  if (hostsEl) {
+    hostsEl.textContent = hostsOn ? '已开启' : '未开启';
+    hostsEl.className = 'apps-status-value ' + (hostsOn ? 'on' : 'off');
+  }
+
+  // Docker 加速状态：来自 status.docker_enabled。
+  const dockerOn = !!(s.docker_enabled);
+  const dockerEl = $('apps-docker-status');
+  if (dockerEl) {
+    dockerEl.textContent = dockerOn ? '已开启' : '未开启';
+    dockerEl.className = 'apps-status-value ' + (dockerOn ? 'on' : 'off');
+  }
+
+  // 系统代理状态：来自 status.system_proxy_enabled（文件存在性）。
+  const sysOn = !!(s.system_proxy_enabled);
+  const sysEl = $('apps-sysproxy-status');
+  if (sysEl) {
+    sysEl.textContent = sysOn ? '已开启' : '未开启';
+    sysEl.className = 'apps-status-value ' + (sysOn ? 'on' : 'off');
+  }
+  const sysToggle = $('sysproxy-toggle');
+  if (sysToggle) sysToggle.checked = sysOn;
+}
+
 async function loadLogs() {
   const entries = await api('/api/logs?limit=120');
   const view = $('log-view');
@@ -884,6 +1085,7 @@ function bindEvents() {
         mirrors: loadMirrors,
         hosts: loadDNS,
         docker: loadDocker,
+        apps: loadApps,
         logs: loadLogs,
         settings: loadConfig,
         about: loadAbout,
@@ -940,6 +1142,61 @@ function bindEvents() {
     }
   });
 
+  // 总览页启停开关：调用 /api/service 的 start / stop。
+  // 看门狗在 stop 流程下会让 rc=0 退出，不会自动拉起；start 时再重新 fork。
+  $('btn-service-toggle').addEventListener('click', async () => {
+    const running = !!(state.status && state.status.status && state.status.status.running);
+    const action = running ? 'stop' : 'start';
+    const confirmMsg = running
+      ? '确定停止加速服务？所有 GitHub 加速通道将中断，需重新启动才会恢复。'
+      : '确定启动加速服务？';
+    if (!confirm(confirmMsg)) return;
+    const btn = $('btn-service-toggle');
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.textContent = running ? '停止中…' : '启动中…';
+    try {
+      await api('/api/service', {method: 'POST', body: {action}});
+      toast(running ? '服务已停止' : '服务已启动', 'ok');
+      // 启动需要几秒初始化，停止后状态立即刷新。
+      setTimeout(() => loadStatus().catch(() => {}), running ? 500 : 2500);
+    } catch (e) {
+      toast(e.message, 'err');
+    } finally {
+      // 状态刷新会重置按钮文案，这里只在出错时手动恢复。
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = origText;
+      }, 600);
+    }
+  });
+
+  // 接入方式区域：下拉切换 / 自定义输入 / 应用 / 保存为外网地址。
+  $('access-host-select').addEventListener('change', () => {
+    // 选"自定义……"时焦点跳到输入框，让用户直接键入；其他选项立即应用。
+    if ($('access-host-select').value === '__custom__') {
+      $('access-host-input').focus();
+      return;
+    }
+    applyAccessHost();
+  });
+  $('access-host-input').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      // 输入框有值时，回车 = 选"自定义"并应用。
+      $('access-host-select').value = '__custom__';
+      applyAccessHost();
+    }
+  });
+  $('btn-access-apply').addEventListener('click', () => {
+    // 输入框有值时强制走自定义路径。
+    if ($('access-host-input').value.trim()) {
+      $('access-host-select').value = '__custom__';
+    }
+    applyAccessHost();
+  });
+  $('btn-access-save-external').addEventListener('click', saveExternalHost);
+
   $('btn-test-all').addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
     btn.disabled = true;
@@ -976,6 +1233,55 @@ function bindEvents() {
       ev.currentTarget.checked = !enabled;
       toast(e.message, 'err');
     }
+  });
+
+  // 看门狗自动重启开关：切换后立即写 config.yaml 与 watchdog_enabled 标记文件，
+  // 下次进程崩溃时看门狗按新值决定是否拉起，无需重启服务。
+  $('watchdog-toggle').addEventListener('change', async (ev) => {
+    const enabled = ev.currentTarget.checked;
+    try {
+      await api('/api/watchdog', {method: 'PUT', body: {auto_restart: enabled}});
+      toast(enabled ? '已开启崩溃自动重启' : '已关闭崩溃自动重启', 'ok');
+      await loadConfig();
+    } catch (e) {
+      ev.currentTarget.checked = !enabled;
+      toast(e.message, 'err');
+    }
+  });
+
+  // 系统级 HTTP 代理开关：写入 /etc/profile.d/ghpp-proxy.sh，让新 login shell
+  // 启动的软件默认走加速器。已运行的进程不受影响，需重启对应软件才生效。
+  $('sysproxy-toggle').addEventListener('change', async (ev) => {
+    const enabled = ev.currentTarget.checked;
+    const confirmMsg = enabled
+      ? '确定开启系统级 HTTP 代理？会在 /etc/profile.d/ghpp-proxy.sh 写入 http_proxy 指向 127.0.0.1:7710，所有新登录 shell 启动的软件默认走加速器。已运行的进程不受影响，需重启对应软件才生效。'
+      : '确定关闭系统级 HTTP 代理？将删除 /etc/profile.d/ghpp-proxy.sh，新 shell 不再走代理。已运行的进程仍保留原环境变量直到重启。';
+    if (!confirm(confirmMsg)) {
+      ev.currentTarget.checked = !enabled;
+      return;
+    }
+    try {
+      await api('/api/sysproxy', {method: 'PUT', body: {enabled: enabled}});
+      toast(enabled ? '已开启系统代理' : '已关闭系统代理', 'ok');
+      // 刷新状态徽章（status.system_proxy_enabled 据文件存在性更新）。
+      await loadStatus();
+      renderApps();
+    } catch (e) {
+      ev.currentTarget.checked = !enabled;
+      toast(e.message, 'err');
+    }
+  });
+
+  // 「应用加速」页跳转按钮：切到对应 tab。
+  $('btn-apps-go-hosts').addEventListener('click', () => {
+    const tab = document.querySelector('.tab[data-tab="hosts"]');
+    if (tab) tab.click();
+  });
+  // 应用加速页的 Docker 一键应用按钮：直接调 applyDocker（不跳转 tab）。
+  $('btn-apps-docker-apply').addEventListener('click', applyDocker);
+  $('btn-apps-scroll-sysproxy').addEventListener('click', () => {
+    const card = document.querySelector('#panel-apps .card:nth-of-type(2)');
+    if (card) card.scrollIntoView({behavior: 'smooth', block: 'start'});
   });
 
   $('btn-dns-sync').addEventListener('click', async () => {
@@ -1098,6 +1404,8 @@ function bindEvents() {
 
   // ---- Docker 加速 ----
   $('btn-docker-save').addEventListener('click', saveDocker);
+  // Docker 加速页的一键应用按钮：写 daemon.json + 重启 Docker。
+  $('btn-docker-apply').addEventListener('click', applyDocker);
 
   // ---- 证书管理 ----
   $('btn-cert-regenerate').addEventListener('click', async () => {
