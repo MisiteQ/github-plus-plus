@@ -18,7 +18,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
-VERSION="${FPK_VERSION:-1.0.6}"
+VERSION="${FPK_VERSION:-1.0.7}"
 DIST="${ROOT}/dist"
 mkdir -p "${DIST}"
 

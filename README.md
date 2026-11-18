@@ -1,18 +1,18 @@
 # GitHub++ 加速器 github-plus-plus
 
 <p>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.0.6-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.0.7-blue">
   <img alt="fnOS" src="https://img.shields.io/badge/fnOS-x86%20%7C%20arm64-success">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-orange">
 </p>
 
 飞牛 fnOS 上的 GitHub / Docker 加速器（FPK 原生应用）：让闲着的 NAS 当局域网加速跳板，家里所有设备直接用。内置十几个社区公益加速通道，**智能测速自动择优、故障源自动冷却切换**；支持 **Git 克隆 / 网页加速 / Release·raw 下载 / Docker 拉取** 全链路加速。对 API 这类必须直连的域名做了熔断——写客户端前先用 512KB 吞吐探针识别运营商 QoS 限速（"放行响应头、掐响应体"），慢链路自动切镜像，直连恢复后自动切回，全过程无感。Go 单二进制 + 单页前端，**默认不影响 NAS 与局域网其他设备的正常联网**。
 
-- 当前版本：**v1.0.6**
+- 当前版本：**v1.0.7**
 - 作者：**MisiteQ**
 - 适用平台：fnOS **x86 + arm64**（最低系统版本 1.0.0）
 - 默认端口：**7717**（控制台）、**7710**（代理）
-- 默认账号：`admin` / `admin123`（登录后请及时修改）
+- 默认账号：`admin` / `admin123`（首次登录会强制修改密码）
 - 运行身份：**root**（hosts 加速需写 /etc/hosts）
 
 ## ✨ 功能
@@ -36,7 +36,7 @@ https://github.com/MisiteQ/FnDepot
 
 ### 方式二：手动安装 FPK
 
-1. 到 [Releases](https://github.com/MisiteQ/github-plus-plus/releases) 按 NAS 架构下载：`github-plus-plus_1.0.6_x86.fpk`（x86 机型）或 `github-plus-plus_1.0.6_arm.fpk`（arm64 机型）
+1. 到 [Releases](https://github.com/MisiteQ/github-plus-plus/releases) 按 NAS 架构下载：`github-plus-plus_1.0.7_x86.fpk`（x86 机型）或 `github-plus-plus_1.0.7_arm.fpk`（arm64 机型）
 2. 飞牛 OS → **应用中心** → 左下角 **手动安装** → 选择 fpk 文件
 3. 安装后从桌面打开 **GitHub++**，或直接访问 `http://<NAS_IP>:7717`
 
@@ -62,6 +62,15 @@ curl -LO "http://192.168.31.205:7710/https://raw.githubusercontent.com/git/git/m
 浏览器加速：控制台里开 hosts 模式全局生效，无需装证书；想更彻底可开 MITM 模式（需装一次根证书）。
 
 Docker 加速：控制台里有说明，把 Docker 的 registry-mirrors 指向 NAS 即可。
+
+## ⚠️ 已知问题
+
+以下问题在 v1.0.7 中**尚未修复**，需独立复现后排查，并非本版改动引入：
+
+- **codeload.github.com 拉取 archive 返回 403**：经 NAS 反代拉取 `https://codeload.github.com/<owner>/<repo>/archive/<ref>` 时返回 `403 Invalid input.`（GitHub 对 codeload 的 UA/参数校验较严，直连可复现条件仍在确认）。
+- **gist.github.com 直连探测持续 TLS 失败**：后台对 `gist.github.com` 的直连探测偶发长期 TLS 握手失败，日志会持续累计该错误（累计次数已达千级），不影响 GitHub 主站加速，但会让直连健康度统计偏悲观。
+
+如遇到上述现象，欢迎在 [Issues](https://github.com/MisiteQ/github-plus-plus/issues) 反馈复现环境（运营商 / 地区 / 是否 IPv6）。
 
 ## 🛠 从源码构建
 
@@ -102,6 +111,7 @@ config/                 飞牛权限与资源声明（以 root 运行）
 
 | 版本 | 内容 |
 |---|---|
+| v1.0.7 | **飞牛 Docker 管理适配 + 安全加固**：自动识别飞牛 Docker 管理（`/usr/trim/etc/dockermgr.conf` 与 `dockermgr` 命令），写入镜像加速并切换当前镜像源，保存原状态支持「取消应用」无损还原；无法识别结构时拒绝硬改并回退 `daemon.json`，`registry-mirrors` 改为合并保留原有源；默认密码强制修改（未改密前接口一律 403，禁止设回默认值，密码不再回显）；修复 `/api/docker` 路由未注册与未知 API 路径返回空响应。已知问题见上方「⚠️ 已知问题」 |
 | v1.0.6 | **接入方式局域网/外网切换**：总览页接入方式区域新增主机地址下拉（跟随当前访问 / 各 LAN IP / 已保存外网地址 / 自定义），可保存外网地址供下次直接复用；Docker 镜像加速地址固定为 127.0.0.1 + 代理端口（NAS 本机 Docker daemon 走 loopback） |
 | v1.0.5 | **后台常驻修复**：用 setsid 让加速服务脱离会话，关闭桌面窗口与登出飞牛账号不再导致服务退出；新增进程崩溃自动重启（看门狗 3 秒拉起，rc=0 视为主动停止不再拉起）；总览页新增「启动/停止服务」开关按钮，设置页新增「崩溃自动重启」开关 |
 | v1.0.4 | **界面适配修复**：侧边栏折叠按钮改为边缘悬浮手柄不再遮挡 Logo；请求分布环形图修正为正圆、圆心数字与标签不再重叠；窄屏下侧边栏自动折叠为图标轨、内容单列；加速源表格列宽优化；静态资源改为 no-cache，升级后界面立即生效 |

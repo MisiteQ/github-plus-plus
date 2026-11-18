@@ -222,7 +222,7 @@ func printBanner(cfg *config.Config, dataDir, logPath string) {
 	fmt.Printf("   用户名    : %s\n", cfg.Server.Username)
 	fmt.Printf("   密码      : %s\n", cfg.Server.Password)
 	fmt.Println()
-	fmt.Println("   提示：请登录控制台后立即修改默认密码。")
+	fmt.Println("   提示：首次登录必须修改默认密码后才能使用控制台。")
 	fmt.Println()
 }
 

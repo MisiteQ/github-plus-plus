@@ -23,6 +23,8 @@ const state = {
   localIPs: [],
   // 用户保存的外网接入地址，由 /api/status 返回。
   externalHost: '',
+  // 是否处于"必须修改默认密码"状态（后端对除改密外的接口统一返回 403）。
+  mustChangePassword: false,
 };
 
 /* ---------- 请求封装 ---------- */
@@ -62,6 +64,12 @@ async function api(path, options) {
   }
 
   if (!resp.ok) {
+    // 默认密码未修改：后端只允许改密相关接口，这里直接弹强制改密窗口，
+    // 避免用户面对一连串看不懂的 403 报错。
+    if (resp.status === 403 && data && data.code === 'password_change_required') {
+      requirePasswordChange();
+      throw new Error('请先修改默认密码');
+    }
     throw new Error((data && data.error) || ('请求失败：HTTP ' + resp.status));
   }
   return data && data.data !== undefined ? data.data : data;
@@ -163,6 +171,11 @@ async function doLogin(ev) {
     state.token = data.token;
     localStorage.setItem('ghpp_token', data.token);
     showApp();
+    if (data.must_change_password) {
+      // 直接用默认密码登录：先改密，别急着加载控制台（否则每个接口都会 403）。
+      requirePasswordChange();
+      return;
+    }
     await boot();
   } catch (e) {
     errBox.textContent = e.message;
@@ -179,6 +192,9 @@ function doLogout(silent) {
   }
   state.token = '';
   localStorage.removeItem('ghpp_token');
+  state.mustChangePassword = false;
+  const forceModal = $('force-pass-modal');
+  if (forceModal) forceModal.hidden = true;
   stopAllTimers();
   if (state.logSource) {
     state.logSource.close();
@@ -186,6 +202,51 @@ function doLogout(silent) {
   }
   showLogin();
   if (!silent) toast('已退出登录');
+}
+
+/* ---------- 强制修改默认密码 ---------- */
+// requirePasswordChange 弹出不可关闭的改密窗口。
+// 后端在仍使用默认密码时会拦截除改密外的所有接口，所以这里不做"稍后再说"。
+function requirePasswordChange() {
+  if (!state.token) return;
+  state.mustChangePassword = true;
+  showApp();
+  const modal = $('force-pass-modal');
+  if (!modal) return;
+  modal.hidden = false;
+  const el = $('force-old-pass');
+  if (el) el.focus();
+}
+
+async function submitForcePassword(ev) {
+  ev.preventDefault();
+  const oldPass = $('force-old-pass').value;
+  const newPass = $('force-new-pass').value;
+  const confirmPass = $('force-new-pass2').value;
+  if (newPass.length < 6) {
+    toast('新密码至少 6 位', 'err');
+    return;
+  }
+  if (newPass === 'admin123') {
+    toast('新密码不能与默认密码相同', 'err');
+    return;
+  }
+  if (newPass !== confirmPass) {
+    toast('两次输入的新密码不一致', 'err');
+    return;
+  }
+  try {
+    await api('/api/password', {
+      method: 'POST',
+      body: {old_password: oldPass, new_password: newPass},
+    });
+    $('force-pass-modal').hidden = true;
+    state.mustChangePassword = false;
+    toast('密码已修改，请用新密码重新登录', 'ok');
+    setTimeout(() => doLogout(false), 900);
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 /* ---------- 总览 ---------- */
@@ -799,7 +860,7 @@ function renderDocker() {
   $('docker-daemon-json').value = d.daemon_json || '';
   $('docker-upstreams').value = (d.upstreams || []).join('\n');
 
-  // applied 徽章：反映 daemon.json 是否已含本代理地址。
+  // applied 徽章：反映系统配置（飞牛 dockermgr.conf 或 daemon.json）是否已含本代理地址。
   const badge = $('docker-applied-badge');
   if (badge) {
     if (d.applied) {
@@ -810,6 +871,25 @@ function renderDocker() {
       badge.className = 'docker-applied-badge off';
     }
   }
+
+  // 平台说明：让用户知道配置到底写进了哪个文件，排查时不用猜。
+  const hint = $('docker-platform-hint');
+  if (hint) {
+    if (d.platform === 'fnos-dockermgr') {
+      hint.hidden = false;
+      hint.innerHTML = '已检测到飞牛 <code>dockermgr</code>：配置写入 ' +
+        '<code>/usr/trim/etc/dockermgr.conf</code>，由飞牛在 Docker 启动时生成 ' +
+        '<code>daemon.json</code>，重启后不会被覆盖。';
+    } else {
+      hint.hidden = false;
+      hint.innerHTML = '未检测到飞牛 dockermgr：配置直接写入 ' +
+        '<code>/etc/docker/daemon.json</code>（合并保留已有镜像源）。';
+    }
+  }
+
+  // 未应用时"取消应用"没有意义，直接禁用避免误点。
+  const unBtn = $('btn-docker-unapply');
+  if (unBtn) unBtn.disabled = !d.applied;
 
   $('docker-registries').innerHTML = (d.supported_registries || []).map((r) => (
     '<tr><td><span class="mono">' + esc(r.registry) + '</span></td>' +
@@ -829,12 +909,13 @@ function renderDocker() {
     'export http_proxy=' + base + '   # 仅加速 GitHub，其他域名直连';
 }
 
-// applyDocker 一键写入 daemon.json 并重启 Docker，让小白用户无需 SSH。
+// applyDocker 一键写入系统 Docker 配置并重启 Docker，让小白用户无需 SSH。
+// 飞牛平台写 dockermgr.conf，其他平台写 daemon.json，由后端自动判断。
 // 强确认：会重启 Docker 服务，所有容器短暂中断。
 async function applyDocker() {
   if (!confirm('确定一键应用到系统？\n\n' +
       '本操作会：\n' +
-      '1. 把本机代理地址写入 /etc/docker/daemon.json（保留其他配置）\n' +
+      '1. 自动识别平台，把本机代理地址写入飞牛 dockermgr.conf 或 /etc/docker/daemon.json\n' +
       '2. 重启 Docker 服务让配置生效\n\n' +
       '⚠️ 所有运行中的容器会短暂中断几秒，请确保没有正在执行的关键任务。')) return;
 
@@ -845,6 +926,28 @@ async function applyDocker() {
     const res = await api('/api/docker/apply', {method: 'POST'});
     toast((res && res.message) || '已应用并重启 Docker', 'ok');
     // 重新加载 docker 状态（applied 徽章会刷新）。
+    await loadDocker();
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
+}
+
+// unapplyDocker 取消应用：移除本机加速地址并重启 Docker，恢复到应用前的配置。
+async function unapplyDocker() {
+  if (!confirm('确定取消应用？\n\n' +
+      '本操作会：\n' +
+      '1. 从 Docker 配置中移除本机加速地址（恢复应用前的镜像源设置）\n' +
+      '2. 重启 Docker 服务\n\n' +
+      '⚠️ 所有运行中的容器会短暂中断几秒。')) return;
+
+  const btn = $('btn-docker-unapply');
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '处理中…'; }
+  try {
+    const res = await api('/api/docker/unapply', {method: 'POST'});
+    toast((res && res.message) || '已取消应用', 'ok');
     await loadDocker();
   } catch (e) {
     toast(e.message, 'err');
@@ -1404,8 +1507,13 @@ function bindEvents() {
 
   // ---- Docker 加速 ----
   $('btn-docker-save').addEventListener('click', saveDocker);
-  // Docker 加速页的一键应用按钮：写 daemon.json + 重启 Docker。
+  // Docker 加速页的一键应用按钮：自动适配平台并重启 Docker。
   $('btn-docker-apply').addEventListener('click', applyDocker);
+  $('btn-docker-unapply').addEventListener('click', unapplyDocker);
+
+  // ---- 强制修改默认密码 ----
+  const forceForm = $('force-pass-form');
+  if (forceForm) forceForm.addEventListener('submit', submitForcePassword);
 
   // ---- 证书管理 ----
   $('btn-cert-regenerate').addEventListener('click', async () => {
@@ -1486,6 +1594,8 @@ async function boot() {
     startTimers();
     startLogStream();
   } catch (e) {
+    // 强制改密状态下所有业务接口都会被拦截，此时不要额外弹错误提示。
+    if (state.mustChangePassword) return;
     toast(e.message, 'err');
     if (String(e.message).indexOf('登录') >= 0) {
       doLogout(true);

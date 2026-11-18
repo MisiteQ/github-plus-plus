@@ -31,6 +31,12 @@ const (
 	ModeDirect Mode = "direct"
 )
 
+// DefaultConsolePassword 是控制台出厂默认密码。
+//
+// 单独导出是为了让认证层能识别"仍在用默认密码"这一高风险状态，
+// 从而强制用户首次登录后修改，而不是只在前端提示一句文案。
+const DefaultConsolePassword = "admin123"
+
 // AllModes 列出全部合法模式，供配置校验与前端下拉框使用。
 func AllModes() []Mode {
 	return []Mode{ModeAuto, ModeProxy, ModeHosts, ModeDirect}
@@ -132,7 +138,10 @@ type ServerConfig struct {
 	// Username 是控制台登录用户名。
 	Username string `yaml:"username" json:"username"`
 	// Password 是控制台登录密码，默认 admin123，登录后可在控制台修改。
-	Password string `yaml:"password" json:"password"`
+	//
+	// json:"-" 是安全要求：/api/config 会整体序列化配置返回给前端，
+	// 若把密码一并输出，任何已登录用户（甚至拿到会话的第三方）都能直接读到明文口令。
+	Password string `yaml:"password" json:"-"`
 	// SessionTTLHours 是登录会话有效期小时数。
 	SessionTTLHours int `yaml:"session_ttl_hours" json:"session_ttl_hours"`
 }
@@ -248,7 +257,7 @@ func Default() *Config {
 		Server: ServerConfig{
 			Listen:          "0.0.0.0:7717",
 			Username:        "admin",
-			Password:        "admin123",
+			Password:        DefaultConsolePassword,
 			SessionTTLHours: 72,
 		},
 		Docker: DockerConfig{
@@ -467,7 +476,8 @@ func (c *Config) normalize() {
 	if c.Server.Password == "" {
 		// 密码不随机生成：随机值不看配置文件就无从得知，对 NAS 局域网
 		// 场景徒增困扰。统一回退到固定默认密码，登录后可在控制台修改。
-		c.Server.Password = "admin123"
+		// 仍在使用该默认值时，API 层会强制用户先改密再使用控制台。
+		c.Server.Password = DefaultConsolePassword
 	}
 	// Docker 上游列表缺省时补上内置值，"official" 必须保留在末尾作为兜底。
 	if len(c.Docker.Upstreams) == 0 {

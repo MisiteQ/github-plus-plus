@@ -60,9 +60,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/cert", s.guard(s.handleCert))
 	mux.HandleFunc("/api/cert/", s.guard(s.handleCert))
 	mux.HandleFunc("/api/docker", s.guard(s.handleDocker))
+	// 必须同时注册带斜杠的前缀模式：Go 的 ServeMux 中 "/api/docker" 只匹配精确路径，
+	// 子路径 /api/docker/apply、/api/docker/unapply 会落到下面的 "/" 兜底并返回首页 HTML，
+	// 前端 JSON.parse(HTML) 失败后只能弹出"服务返回了无法解析的内容"这种误导性错误。
+	mux.HandleFunc("/api/docker/", s.guard(s.handleDocker))
 	mux.HandleFunc("/api/network", s.guard(s.handleNetwork))
 	mux.HandleFunc("/api/sysproxy", s.guard(s.handleSysProxy))
 	mux.HandleFunc("/api/about", s.guard(s.handleAbout))
+
+	// ---- 未匹配的 /api/ 路径：返回 JSON 404 ----
+	// 不能落到前端兜底，否则任何路由遗漏都会表现为 HTML + 200，
+	// 前端只会报"解析失败"，问题被完全掩盖（issue #1 即如此）。
+	mux.HandleFunc("/api/", s.handleAPINotFound)
 
 	// ---- 静态资源：未匹配的路径交给前端 ----
 	mux.Handle("/", s.assets)
@@ -100,6 +109,9 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 }
 
 // guard 包装需要认证的处理器。
+//
+// 除认证外还负责"默认密码强制修改"拦截：控制台能改 /etc/hosts、导入 CA、
+// 重启 Docker，权限等价于 NAS root，绝不能长期停留在 admin123 上。
 func (s *Server) guard(fn http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := TokenFromRequest(r)
@@ -107,8 +119,44 @@ func (s *Server) guard(fn http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, "未登录或会话已过期")
 			return
 		}
+		if s.mustChangePassword() && !passwordChangeExempt(r.URL.Path) {
+			// 带上 code 字段，前端据此弹出不可关闭的改密弹窗，
+			// 而不是把普通报错 toast 出来让用户摸不着头脑。
+			writeJSON(w, http.StatusForbidden, map[string]any{
+				"ok":    false,
+				"code":  "password_change_required",
+				"error": "当前仍在使用默认密码，请先修改控制台密码",
+			})
+			return
+		}
 		fn(w, r)
 	}
+}
+
+// passwordChangeExempt 判断某路径在"必须改密"状态下是否仍可访问。
+//
+// 只放行改密、登出、健康检查这类必要接口，其余一律拦截。
+func passwordChangeExempt(path string) bool {
+	switch path {
+	case "/api/password", "/api/logout", "/api/login", "/api/health":
+		return true
+	}
+	return false
+}
+
+// mustChangePassword 判断控制台是否仍在用出厂默认密码。
+func (s *Server) mustChangePassword() bool {
+	if s.app == nil {
+		return false
+	}
+	return s.app.CurrentConfig().Server.Password == config.DefaultConsolePassword
+}
+
+// handleAPINotFound 为未注册的 /api/ 路径返回 JSON 404。
+//
+// 优先于 "/" 的前端兜底，避免接口缺失时返回 200 + index.html。
+func (s *Server) handleAPINotFound(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotFound, "接口不存在：%s %s", r.Method, r.URL.Path)
 }
 
 // handleLogin 处理登录请求。
@@ -144,7 +192,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   cfg.Server.SessionTTLHours * 3600,
 	})
 
-	writeOK(w, map[string]any{"token": token, "username": req.Username})
+	writeOK(w, map[string]any{
+		"token":    token,
+		"username": req.Username,
+		// 前端据此直接弹出强制改密窗口，避免进入控制台后每个请求都 403。
+		"must_change_password": cfg.Server.Password == config.DefaultConsolePassword,
+	})
 }
 
 // handleLogout 处理登出请求。
@@ -628,6 +681,11 @@ func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.NewPassword) < 6 {
 		writeError(w, http.StatusBadRequest, "新密码长度至少 6 位")
+		return
+	}
+	// 禁止把密码设回出厂默认值，否则"强制改密"可被一次无意义修改绕过。
+	if req.NewPassword == config.DefaultConsolePassword {
+		writeError(w, http.StatusBadRequest, "新密码不能使用默认密码")
 		return
 	}
 
